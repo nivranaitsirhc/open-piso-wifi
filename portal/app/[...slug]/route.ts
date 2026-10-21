@@ -17,18 +17,16 @@ export async function GET(request: NextRequest) {
   const host = (request.headers.get('host') || '').toLowerCase();
   const path = request.nextUrl.pathname.toLowerCase();
   const portalUrl = await getPortalRedirectUrl(request.headers.get('host'));
-  const { isAuthenticated, isVip, macAddress, remainingSeconds } = await isClientAuthenticated(ip);
+  const { isAuthenticated, isVip, macAddress, remainingSeconds, deviceName, notes } = await isClientAuthenticated(ip);
 
   // Proactively re-assert VIP status on OpenWrt firewall if a probe hits the portal
   if (isVip && macAddress) {
-    setDaemonWhitelist(macAddress, 'add', ip).catch(() => {});
-  }
-
-  // If client has an active session and hit this probe handler, OpenWrt firewall
-  // must have lost the authorization entry (e.g. router rebooted or firewall reloaded).
-  // Immediately re-assert access on the OpenWrt router:
-  if (isAuthenticated && macAddress && remainingSeconds > 0) {
-    authorizeClientMac(macAddress, Math.ceil(remainingSeconds / 60), ip).catch(() => {});
+    setDaemonWhitelist(macAddress, 'add', ip, { name: deviceName, notes, notify: true }).catch(() => {});
+  } else if (isAuthenticated && macAddress && remainingSeconds > 0) {
+    // If client has an active session and hit this probe handler, OpenWrt firewall
+    // must have lost the authorization entry (e.g. router rebooted or firewall reloaded).
+    // Re-assert access on the OpenWrt router without triggering sales or telegram notifications:
+    authorizeClientMac(macAddress, Math.ceil(remainingSeconds / 60), ip, { isNewSession: false, notify: false, amount: 0 }).catch(() => {});
   }
 
   // If user is authenticated, return standard OS Success signals so captive popups close:

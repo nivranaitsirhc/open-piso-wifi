@@ -18,6 +18,7 @@ export async function isClientAuthenticated(
   isBlacklisted?: boolean;
   blacklistNotes?: string;
   deviceName?: string;
+  notes?: string;
   isPaused?: boolean;
   session?: any;
   sessionToken?: string | null;
@@ -59,6 +60,8 @@ export async function isClientAuthenticated(
           isVip: true,
           macAddress,
           remainingSeconds: 31536000, // 1 year unlimited
+          deviceName: deviceRule.name || undefined,
+          notes: deviceRule.notes || undefined,
         };
       }
     }
@@ -107,7 +110,7 @@ export async function isClientAuthenticated(
         });
 
         // Immediately grant internet forwarding on OpenWrt
-        authorizeClientMac(macAddress, remainingMinutes, clientIp).catch((err) => {
+        authorizeClientMac(macAddress, remainingMinutes, clientIp, { isNewSession: false, notify: false, amount: 0 }).catch((err) => {
           console.warn('[AUTO RESUME] Notice authorizing client MAC:', err);
         });
 
@@ -240,7 +243,7 @@ export async function isClientAuthenticated(
               },
             });
 
-            authorizeClientMac(macAddress, remainingMinutes, clientIp).catch((err) => {
+            authorizeClientMac(macAddress, remainingMinutes, clientIp, { isNewSession: false, notify: false, amount: 0 }).catch((err) => {
               console.warn('[MAC MIGRATION] Notice authorizing resumed MAC:', err);
             });
 
@@ -268,7 +271,7 @@ export async function isClientAuthenticated(
         if (remainingSeconds > 0) {
           // Authorize new MAC on OpenWrt immediately
           const remainingMinutes = Math.max(1, Math.ceil(remainingSeconds / 60));
-          authorizeClientMac(macAddress, remainingMinutes, clientIp).catch((err) => {
+          authorizeClientMac(macAddress, remainingMinutes, clientIp, { isNewSession: false, notify: false, amount: 0 }).catch((err) => {
             console.warn('[MAC MIGRATION] Notice authorizing migrated MAC:', err);
           });
 

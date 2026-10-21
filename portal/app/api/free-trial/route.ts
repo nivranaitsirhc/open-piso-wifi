@@ -102,7 +102,12 @@ export async function POST(request: NextRequest) {
     });
 
     // 5. Authorize on OpenWrt
-    await authorizeClientMac(macAddress, trialMinutes, ip);
+    await authorizeClientMac(macAddress, trialMinutes, ip, {
+      amount: 0,
+      type: 'FREE_TRIAL',
+      isNewSession: true,
+      notify: false,
+    });
 
     const response = NextResponse.json({
       success: true,

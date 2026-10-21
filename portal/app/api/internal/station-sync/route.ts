@@ -172,8 +172,12 @@ export async function POST(request: NextRequest) {
               },
             });
 
-            // Re-authorize client on OpenWrt firewall
-            await authorizeClientMac(session.macAddress, remainingMinutes, session.ipAddress || undefined);
+            // Re-authorize client on OpenWrt firewall (resuming existing session, not new payment)
+            await authorizeClientMac(session.macAddress, remainingMinutes, session.ipAddress || undefined, {
+              amount: 0,
+              isNewSession: false,
+              notify: false,
+            });
 
             resumedCount++;
             disconnectedTimers.delete(normMac);

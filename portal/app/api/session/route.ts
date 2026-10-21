@@ -98,12 +98,18 @@ export async function GET(request: NextRequest) {
 
   // Proactively self-heal VIP devices on OpenWrt firewall
   if (authStatus.isVip && authStatus.macAddress) {
-    setDaemonWhitelist(authStatus.macAddress, 'add', ip).catch(() => { });
-  }
-
-  // Proactively self-heal active authenticated sessions on OpenWrt firewall
-  if (authStatus.isAuthenticated && authStatus.macAddress && authStatus.remainingSeconds > 0) {
-    authorizeClientMac(authStatus.macAddress, Math.ceil(authStatus.remainingSeconds / 60), ip).catch(() => { });
+    setDaemonWhitelist(authStatus.macAddress, 'add', ip, {
+      name: authStatus.deviceName,
+      notes: authStatus.notes,
+      notify: true,
+    }).catch(() => { });
+  } else if (authStatus.isAuthenticated && authStatus.macAddress && authStatus.remainingSeconds > 0) {
+    // Proactively self-heal active authenticated sessions on OpenWrt firewall without re-triggering sales or notifications
+    authorizeClientMac(authStatus.macAddress, Math.ceil(authStatus.remainingSeconds / 60), ip, {
+      isNewSession: false,
+      notify: false,
+      amount: 0,
+    }).catch(() => { });
   }
 
   // Persistent Session Code (Kowdigo) Resolution:

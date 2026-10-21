@@ -104,8 +104,39 @@ export class TelegramBotService {
     };
   }
 
-  public async sendNotification(markdownText: string): Promise<boolean> {
+  private sentHistory = new Map<string, number>();
+
+  private isDuplicate(key: string, cooldownMs: number): boolean {
+    const now = Date.now();
+    const lastSent = this.sentHistory.get(key);
+    if (lastSent && now - lastSent < cooldownMs) {
+      return true;
+    }
+    this.sentHistory.set(key, now);
+    // Cleanup old entries
+    if (this.sentHistory.size > 200) {
+      for (const [k, time] of this.sentHistory.entries()) {
+        if (now - time > 3600000) {
+          this.sentHistory.delete(k);
+        }
+      }
+    }
+    return false;
+  }
+
+  public async sendNotification(
+    markdownText: string,
+    options?: { dedupeKey?: string; cooldownMs?: number }
+  ): Promise<boolean> {
     if (!this.token || !this.adminChatId) return false;
+
+    const dedupeKey = options?.dedupeKey || `msg:${markdownText}`;
+    const cooldown = options?.cooldownMs ?? 20000; // 20s cooldown for identical messages
+
+    if (this.isDuplicate(dedupeKey, cooldown)) {
+      console.log(`[TELEGRAM] ⏳ Suppressed duplicate notification within ${cooldown / 1000}s cooldown.`);
+      return false;
+    }
 
     try {
       const url = `https://api.telegram.org/bot${this.token}/sendMessage`;
@@ -137,6 +168,21 @@ export class TelegramBotService {
   }
 
   public notifySessionAuthorized(slotName: string, amount: number, durationMinutes: number, mac: string) {
+    const normalizedMac = mac.toLowerCase();
+
+    // Safety Gate: If duration represents an unlimited/whitelisted session (e.g. 1 year / 8760h),
+    // redirect to VIP notification instead of presenting as a paid coinslot session!
+    if (durationMinutes >= 500000) {
+      this.notifyVipConnected(mac);
+      return;
+    }
+
+    const dedupeKey = `session:${normalizedMac}`;
+    if (this.isDuplicate(dedupeKey, 2 * 60 * 1000)) {
+      console.log(`[TELEGRAM] ⏳ Suppressed duplicate session notification for ${mac}`);
+      return;
+    }
+
     const hours = Math.floor(durationMinutes / 60);
     const mins = durationMinutes % 60;
     const timeStr = hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
@@ -146,15 +192,49 @@ export class TelegramBotService {
       `• *Slot:* ${slotName}\n` +
       `• *Paid:* ₱${amount.toFixed(2)}\n` +
       `• *Duration:* ${timeStr}\n` +
-      `• *Client MAC:* \`${mac}\``
+      `• *Client MAC:* \`${mac}\``,
+      { dedupeKey, cooldownMs: 2 * 60 * 1000 }
+    );
+  }
+
+  public notifyVipConnected(mac: string, deviceName?: string, notes?: string) {
+    const normalizedMac = mac.toLowerCase();
+    const dedupeKey = `vip:${normalizedMac}`;
+
+    // Suppress repeated VIP notifications within 30 minutes for the same device
+    if (this.isDuplicate(dedupeKey, 30 * 60 * 1000)) {
+      return;
+    }
+
+    const nameLine = deviceName ? `• *Device:* ${deviceName}\n` : '';
+    const notesLine = notes ? `• *Notes:* ${notes}\n` : '';
+
+    this.sendNotification(
+      `👑 *VIP / Whitelisted Device Online*\n` +
+      `• *Status:* Unlimited Access (Whitelisted)\n` +
+      nameLine +
+      notesLine +
+      `• *Client MAC:* \`${mac}\``,
+      { dedupeKey, cooldownMs: 30 * 60 * 1000 }
     );
   }
 
   public notifyWanStatus(isOnline: boolean) {
+    const dedupeKey = `wan:${isOnline ? 'online' : 'offline'}`;
+    if (this.isDuplicate(dedupeKey, 60 * 1000)) {
+      return;
+    }
+
     if (isOnline) {
-      this.sendNotification('🌐 *WAN Recovered*\nInternet connection has been restored.');
+      this.sendNotification('🌐 *WAN Recovered*\nInternet connection has been restored.', {
+        dedupeKey,
+        cooldownMs: 60 * 1000,
+      });
     } else {
-      this.sendNotification('⚠️ *WAN Outage Alert!*\nInternet connection is DOWN. Coinslots have been inhibited.');
+      this.sendNotification('⚠️ *WAN Outage Alert!*\nInternet connection is DOWN. Coinslots have been inhibited.', {
+        dedupeKey,
+        cooldownMs: 60 * 1000,
+      });
     }
   }
 

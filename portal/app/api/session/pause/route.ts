@@ -95,8 +95,12 @@ export async function POST(request: NextRequest) {
         },
       });
 
-      // Re-authorize on OpenWrt
-      await authorizeClientMac(macAddress, remainingMinutes, ip);
+      // Re-authorize on OpenWrt (resuming existing time, not new sale)
+      await authorizeClientMac(macAddress, remainingMinutes, ip, {
+        amount: 0,
+        isNewSession: false,
+        notify: false,
+      });
 
       return NextResponse.json({
         success: true,

@@ -162,8 +162,12 @@ export async function POST(request: NextRequest) {
             });
           }
 
-          // Authorize new MAC on OpenWrt immediately
-          const authResult = await authorizeClientMac(macAddress, remainingMins, clientIp);
+          // Authorize new MAC on OpenWrt immediately (transferring existing session, not new payment)
+          const authResult = await authorizeClientMac(macAddress, remainingMins, clientIp, {
+            amount: 0,
+            isNewSession: false,
+            notify: false,
+          });
           if (!authResult.success) {
             console.warn('[SESSION TRANSFER] Hardware daemon authorization warning:', authResult.error);
           }
@@ -495,7 +499,12 @@ export async function POST(request: NextRequest) {
 
     // Step 5: Send Authorization to Hardware Daemon (executes OpenWrt firewall rule)
     const remainingTotalMinutes = Math.ceil((sessionEndTime.getTime() - now.getTime()) / (60 * 1000));
-    const authResult = await authorizeClientMac(macAddress, remainingTotalMinutes, clientIp);
+    const authResult = await authorizeClientMac(macAddress, remainingTotalMinutes, clientIp, {
+      amount: amountPaid,
+      type: paymentType,
+      isNewSession: true,
+      notify: true,
+    });
 
     if (!authResult.success) {
       console.warn('Hardware daemon authorization warning:', authResult.error);

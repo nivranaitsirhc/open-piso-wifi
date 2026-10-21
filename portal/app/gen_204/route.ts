@@ -10,16 +10,14 @@ export async function GET(request: NextRequest) {
     '127.0.0.1';
 
   const portalUrl = await getPortalRedirectUrl(request.headers.get('host'));
-  const { isAuthenticated, isVip, macAddress, remainingSeconds } = await isClientAuthenticated(ip);
+  const { isAuthenticated, isVip, macAddress, remainingSeconds, deviceName, notes } = await isClientAuthenticated(ip);
 
   if (isVip && macAddress) {
-    setDaemonWhitelist(macAddress, 'add', ip).catch(() => {});
-  }
-
-  // If client has an active session and hit this probe handler, OpenWrt firewall
-  // must have lost the authorization entry. Immediately re-assert access on router:
-  if (isAuthenticated && macAddress && remainingSeconds > 0) {
-    authorizeClientMac(macAddress, Math.ceil(remainingSeconds / 60), ip).catch(() => {});
+    setDaemonWhitelist(macAddress, 'add', ip, { name: deviceName, notes, notify: true }).catch(() => {});
+  } else if (isAuthenticated && macAddress && remainingSeconds > 0) {
+    // If client has an active session and hit this probe handler, OpenWrt firewall
+    // must have lost the authorization entry. Re-assert access on router without charging or telegram spam:
+    authorizeClientMac(macAddress, Math.ceil(remainingSeconds / 60), ip, { isNewSession: false, notify: false, amount: 0 }).catch(() => {});
   }
 
   if (isAuthenticated) {

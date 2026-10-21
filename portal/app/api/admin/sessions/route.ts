@@ -125,7 +125,11 @@ export async function POST(request: NextRequest) {
         });
 
         const totalRemainingMinutes = Math.ceil((newEndTime.getTime() - Date.now()) / (60 * 1000));
-        await authorizeClientMac(session.macAddress, totalRemainingMinutes);
+        await authorizeClientMac(session.macAddress, totalRemainingMinutes, undefined, {
+          amount: 0,
+          isNewSession: false,
+          notify: false,
+        });
 
         return NextResponse.json({
           success: true,
@@ -157,7 +161,12 @@ export async function POST(request: NextRequest) {
           },
         });
 
-        await authorizeClientMac(targetMac, minutesToAdd);
+        await authorizeClientMac(targetMac, minutesToAdd, undefined, {
+          amount: 0,
+          type: 'BONUS',
+          isNewSession: true,
+          notify: false,
+        });
 
         return NextResponse.json({
           success: true,

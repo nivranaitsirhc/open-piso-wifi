@@ -18,7 +18,11 @@ interface AuthorizeRequestBody {
   ip?: string;
   amount?: number;
   slotId?: string;
-  type?: 'COIN' | 'VOUCHER' | 'FREE_TRIAL';
+  type?: string;
+  isNewSession?: boolean;
+  notify?: boolean;
+  deviceName?: string;
+  notes?: string;
 }
 
 interface DeauthorizeRequestBody {
@@ -269,18 +273,34 @@ function handlePhysicalButtonPressed() {
 
 // Background WAN Outage Monitor (runs every 15 seconds)
 let prevWanStatus = true;
+let consecutiveWanFailures = 0;
+let consecutiveWanSuccesses = 0;
+
 setInterval(async () => {
   const online = await checkWanStatus();
-  if (online !== prevWanStatus) {
-    prevWanStatus = online;
-    telegramBot.notifyWanStatus(online);
-    if (online) {
+  if (!online) {
+    consecutiveWanSuccesses = 0;
+    consecutiveWanFailures++;
+
+    // Require 2 consecutive failed probes (30s) before alerting and inhibiting to prevent transient glitch false-positives
+    if (consecutiveWanFailures >= 2 && prevWanStatus !== false) {
+      prevWanStatus = false;
+      telegramBot.notifyWanStatus(false);
+      if (coinSlotEnabled) {
+        console.warn('[OUTAGE GUARD] Internet connection is DOWN! Automatically inhibiting coin slot.');
+        disableCoinSlot('outage');
+      }
+    }
+  } else {
+    consecutiveWanFailures = 0;
+    consecutiveWanSuccesses++;
+
+    // Transition back to online once a solid check succeeds
+    if (prevWanStatus === false && consecutiveWanSuccesses >= 1) {
+      prevWanStatus = true;
+      telegramBot.notifyWanStatus(true);
       supabaseSync.flushOfflineQueue();
     }
-  }
-  if (!online && coinSlotEnabled) {
-    console.warn('[OUTAGE GUARD] Internet connection is DOWN! Automatically inhibiting coin slot.');
-    disableCoinSlot('outage');
   }
 }, 15000);
 
@@ -982,10 +1002,23 @@ app.get('/api/hardware/debug', (_req: Request, res: Response) => {
 
 // Authorize a client MAC address on OpenWrt
 app.post('/api/authorize', async (req: Request<{}, {}, AuthorizeRequestBody>, res: Response) => {
-  const { mac, durationMinutes, ip, amount, slotId, type } = req.body;
+  const { mac, durationMinutes, ip, amount, slotId, type, isNewSession, notify, deviceName, notes } = req.body;
 
   if (!mac || typeof durationMinutes !== 'number') {
     return res.status(400).json({ error: 'Invalid request body. "mac" and "durationMinutes" are required.' });
+  }
+
+  // Safety Gate: If this is a whitelisted / unlimited VIP MAC (e.g. 1 year / 525,600m duration or marked WHITELIST),
+  // add to permanent OpenWrt whitelist, notify as VIP, and NEVER process as a coin sale!
+  if (type === 'WHITELIST' || durationMinutes >= 500000) {
+    const wlResult = await router.addWhitelist(mac, ip);
+    if (!wlResult.success) {
+      return res.status(500).json({ error: wlResult.error || 'Failed to whitelist MAC on router' });
+    }
+    if (notify !== false) {
+      telegramBot.notifyVipConnected(mac, deviceName, notes);
+    }
+    return res.json({ success: true, mac, status: 'WHITELISTED', isVip: true });
   }
 
   const result = await router.authorize(mac, durationMinutes, ip);
@@ -994,28 +1027,37 @@ app.post('/api/authorize', async (req: Request<{}, {}, AuthorizeRequestBody>, re
     return res.status(500).json({ error: result.error || 'Failed to authorize MAC on router' });
   }
 
-  // Update live sales telemetry & cashbox
-  checkDayRollover();
-  const txAmount = typeof amount === 'number' ? amount : (durationMinutes > 0 ? Math.ceil(durationMinutes / 10) : 0);
-  todaySalesTotal += txAmount;
-  todayTxCount += 1;
-  cashBoxAmount += txAmount;
+  // Only record sales, cashbox, and transactions if this is a genuine new/paid session
+  // (Prevents captive portal probes, session polls, auto-resumes, and firewall refreshes from creating phantom transactions or spamming Telegram)
+  const isPaidTransaction = isNewSession === true || (typeof amount === 'number' && amount > 0);
+  const txAmount = typeof amount === 'number' ? amount : 0;
+
+  if (isPaidTransaction && txAmount > 0) {
+    checkDayRollover();
+    todaySalesTotal += txAmount;
+    todayTxCount += 1;
+    cashBoxAmount += txAmount;
+  }
 
   const slotObj = slotId ? satelliteCoinslots.get(slotId) : undefined;
   const slotName = slotObj ? slotObj.name : 'Main Coinslot';
 
-  // Instant notification to Telegram admin
-  telegramBot.notifySessionAuthorized(slotName, txAmount, durationMinutes, mac);
+  // Instant notification to Telegram admin only for new sessions or explicit paid amounts
+  if (notify !== false && (isNewSession === true || (typeof amount === 'number' && amount > 0))) {
+    telegramBot.notifySessionAuthorized(slotName, txAmount, durationMinutes, mac);
+  }
 
-  // Sync to Supabase PostgreSQL cloud database
-  supabaseSync.recordTransaction({
-    slotId: slotId || 'main',
-    slotName,
-    amount: txAmount,
-    durationMinutes,
-    macAddress: mac,
-    type: type || 'COIN',
-  }).catch(() => {});
+  // Sync to Supabase PostgreSQL cloud database only for genuine new transactions
+  if (isPaidTransaction) {
+    supabaseSync.recordTransaction({
+      slotId: slotId || 'main',
+      slotName,
+      amount: txAmount,
+      durationMinutes,
+      macAddress: mac,
+      type: type || 'COIN',
+    }).catch(() => {});
+  }
 
   res.json({ success: true, mac, expires_in: durationMinutes, recordedAmount: txAmount });
 });
@@ -1163,10 +1205,13 @@ app.post('/api/router/flush', async (_req: Request, res: Response) => {
 });
 
 // Device Whitelist Management
-app.post('/api/router/whitelist', async (req: Request<{}, {}, { action: 'add' | 'remove'; mac: string; ip?: string }>, res: Response) => {
-  const { action, mac, ip } = req.body;
+app.post('/api/router/whitelist', async (req: Request<{}, {}, { action: 'add' | 'remove'; mac: string; ip?: string; name?: string; notes?: string; notify?: boolean }>, res: Response) => {
+  const { action, mac, ip, name, notes, notify } = req.body;
   try {
     const result = action === 'remove' ? await router.removeWhitelist(mac) : await router.addWhitelist(mac, ip);
+    if (action === 'add' && notify !== false) {
+      telegramBot.notifyVipConnected(mac, name, notes);
+    }
     res.json(result);
   } catch (error: any) {
     res.status(500).json({ error: error.message || 'Whitelist action failed' });

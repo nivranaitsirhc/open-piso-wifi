@@ -234,7 +234,15 @@ export async function authorizeClientMac(
   mac: string,
   durationMinutes: number,
   ip?: string,
-  options?: { amount?: number; slotId?: string; type?: 'COIN' | 'VOUCHER' | 'FREE_TRIAL' }
+  options?: {
+    amount?: number;
+    slotId?: string;
+    type?: string;
+    isNewSession?: boolean;
+    notify?: boolean;
+    deviceName?: string;
+    notes?: string;
+  }
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const res = await fetch(`${DAEMON_URL}/api/authorize`, {
@@ -247,6 +255,10 @@ export async function authorizeClientMac(
         amount: options?.amount,
         slotId: options?.slotId,
         type: options?.type,
+        isNewSession: options?.isNewSession,
+        notify: options?.notify,
+        deviceName: options?.deviceName,
+        notes: options?.notes,
       }),
       signal: AbortSignal.timeout(5000),
     });
@@ -513,13 +525,21 @@ export async function getRouterTelemetry(): Promise<RouterTelemetryData> {
 export async function setDaemonWhitelist(
   mac: string,
   action: 'add' | 'remove',
-  ip?: string
+  ip?: string,
+  options?: { name?: string; notes?: string; notify?: boolean }
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const res = await fetch(`${DAEMON_URL}/api/router/whitelist`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mac, action, ip }),
+      body: JSON.stringify({
+        mac,
+        action,
+        ip,
+        name: options?.name,
+        notes: options?.notes,
+        notify: options?.notify,
+      }),
       signal: AbortSignal.timeout(5000),
     });
 
