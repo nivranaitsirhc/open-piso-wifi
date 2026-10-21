@@ -337,10 +337,7 @@ if [ "$IS_INTERACTIVE" = true ]; then
     echo -e "${PURPLE}[B] Security & Administration${NC}"
     ask_prompt "  • Admin Dashboard PIN        [$DEFAULT_ADMIN_PIN]: " "$DEFAULT_ADMIN_PIN" ADMIN_PIN
 
-    if [ -z "$GITHUB_TOKEN" ]; then
-        echo -e "  • GitHub Personal Access Token (for OTA updates on private repo):"
-        ask_secret "    Enter Token (press Enter to skip): " "" GITHUB_TOKEN
-    else
+    if [ -n "$GITHUB_TOKEN" ]; then
         echo -e "  • GitHub Token:              ${GREEN}Detected (${GITHUB_TOKEN:0:6}...)${NC}"
     fi
 
@@ -500,6 +497,23 @@ if [ "$ALREADY_EXTRACTED" = false ]; then
         HTTP_CODE=$(echo "$RES" | tail -n1)
         JSON=$(echo "$RES" | sed '$d')
 
+        # If configured token was rejected with 401, automatically fallback to public access
+        if [ "$HTTP_CODE" = "401" ] && [ -n "$GITHUB_TOKEN" ]; then
+            echo -e "${YELLOW}⚠️ Notice: Configured GitHub Token was rejected (HTTP 401). Retrying with public access...${NC}"
+            RETRY_RES=$(fetch_api "")
+            RETRY_CODE=$(echo "$RETRY_RES" | tail -n1)
+            if [ "$RETRY_CODE" = "200" ]; then
+                echo -e "${GREEN}✓ Successfully connected to public repository (no token required).${NC}"
+                rm -f "$HOME/.github_token" 2>/dev/null || true
+                [ -f "$PORTAL_DIR/.env" ] && sed -i '/^GITHUB_TOKEN=/d' "$PORTAL_DIR/.env" 2>/dev/null || true
+                [ -f "$ROOT_DIR/pisowifi-portal/.env" ] && sed -i '/^GITHUB_TOKEN=/d' "$ROOT_DIR/pisowifi-portal/.env" 2>/dev/null || true
+                GITHUB_TOKEN=""
+                RES="$RETRY_RES"
+                HTTP_CODE="$RETRY_CODE"
+                JSON=$(echo "$RES" | sed '$d')
+            fi
+        fi
+
         if [ "$HTTP_CODE" = "404" ] || [ "$HTTP_CODE" = "401" ]; then
             if [ "$IS_INTERACTIVE" = true ] && [ -z "$GITHUB_TOKEN" ]; then
                 echo -e "${YELLOW}🔒 Repository appears private or requires authentication.${NC}"
@@ -533,22 +547,20 @@ if [ "$ALREADY_EXTRACTED" = false ]; then
             fi
         fi
 
-        # Authenticated asset download
-        if [ -n "$ASSET_ID" ] && [ -n "$GITHUB_TOKEN" ]; then
+        # 1. Public direct download (Primary for public repositories)
+        echo -e "--> Attempting direct download from GitHub Releases..."
+        if curl -fSL --progress-bar "https://github.com/${GITHUB_REPO}/releases/latest/download/${RELEASE_TARBALL}" -o "$TEMP_TARBALL" 2>/dev/null; then
+            DOWNLOAD_SUCCESS=true
+        fi
+
+        # 2. Authenticated asset download fallback (For private repositories or forks)
+        if [ "$DOWNLOAD_SUCCESS" = false ] && [ -n "$ASSET_ID" ] && [ -n "$GITHUB_TOKEN" ]; then
             echo -e "--> Downloading pre-compiled bundle (${ASSET_ID}) via GitHub API..."
             if curl -fSL --progress-bar \
                  -H "Authorization: Bearer $GITHUB_TOKEN" \
                  -H "Accept: application/octet-stream" \
                  "https://api.github.com/repos/${GITHUB_REPO}/releases/assets/${ASSET_ID}" \
                  -o "$TEMP_TARBALL"; then
-                DOWNLOAD_SUCCESS=true
-            fi
-        fi
-
-        # Public direct fallback
-        if [ "$DOWNLOAD_SUCCESS" = false ]; then
-            echo -e "--> Attempting direct download from GitHub Releases..."
-            if curl -fSL --progress-bar "https://github.com/${GITHUB_REPO}/releases/latest/download/${RELEASE_TARBALL}" -o "$TEMP_TARBALL" 2>/dev/null; then
                 DOWNLOAD_SUCCESS=true
             fi
         fi

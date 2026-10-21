@@ -174,10 +174,20 @@ export async function GET() {
         headers['Authorization'] = `Bearer ${token}`;
       }
 
-      const res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`, {
+      let res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`, {
         signal: controller.signal,
         headers,
       });
+
+      // If token was rejected with 401 Unauthorized, retry unauthenticated for public repo
+      if (res.status === 401 && headers['Authorization']) {
+        const publicHeaders = { ...headers };
+        delete publicHeaders['Authorization'];
+        res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`, {
+          signal: controller.signal,
+          headers: publicHeaders,
+        });
+      }
       clearTimeout(timeoutId);
 
       if (res.ok) {

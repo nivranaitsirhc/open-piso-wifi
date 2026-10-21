@@ -254,13 +254,11 @@ bash scripts/update.sh
 ```
 *(To reinstall or force re-update regardless of version tag, run: `bash scripts/update.sh --force`)*
 
-> [!TIP]
-> **Private Repository Updates**:
-> If your GitHub repository is private, provide your GitHub Personal Access Token (PAT) using any of these methods:
-> - CLI flag: `bash scripts/update.sh --token ghp_xxxx`
-> - In `pisowifi-portal/.env`: `GITHUB_TOKEN="ghp_xxxx"`
-> - In `~/.github_token`: `echo "ghp_xxxx" > ~/.github_token`
-> - Or enter it when prompted by the script.
+> [!NOTE]
+> **Public Repository & Zero-Token Updates**:
+> OpenPisoWiFi is a public repository—**no GitHub token is required** for installation or updates! Direct downloads from GitHub Releases work automatically.
+> - If you previously used a private repository and see `HTTP 401 Unauthorized`, remove the expired token: `rm -f ~/.github_token` and remove `GITHUB_TOKEN` from your `.env`.
+> - If you are developing on a private fork, you can optionally provide a Personal Access Token via `--token <PAT>` or in `.env`.
 
 ---
 

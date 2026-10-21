@@ -168,6 +168,24 @@ if command -v curl >/dev/null 2>&1; then
     HTTP_CODE=$(echo "$RELEASE_RESPONSE" | tail -n1)
     RELEASE_JSON=$(echo "$RELEASE_RESPONSE" | sed '$d')
 
+    # If configured token was rejected with 401, automatically fallback to public access
+    if [ "$HTTP_CODE" = "401" ] && [ -n "$GITHUB_TOKEN" ]; then
+        echo -e "${YELLOW}⚠️ Notice: Configured GitHub Token was rejected (HTTP 401). Retrying with public access...${NC}"
+        RETRY_RESPONSE=$(query_github_release "")
+        RETRY_HTTP_CODE=$(echo "$RETRY_RESPONSE" | tail -n1)
+        if [ "$RETRY_HTTP_CODE" = "200" ]; then
+            echo -e "${GREEN}✓ Successfully connected to public repository (no token required).${NC}"
+            # Clean up stale/invalid token so it doesn't cause future 401 errors
+            rm -f "$HOME/.github_token" 2>/dev/null || true
+            [ -f "$PORTAL_DIR/.env" ] && sed -i '/^GITHUB_TOKEN=/d' "$PORTAL_DIR/.env" 2>/dev/null || true
+            [ -f "$ROOT_DIR/pisowifi-portal/.env" ] && sed -i '/^GITHUB_TOKEN=/d' "$ROOT_DIR/pisowifi-portal/.env" 2>/dev/null || true
+            GITHUB_TOKEN=""
+            RELEASE_RESPONSE="$RETRY_RESPONSE"
+            HTTP_CODE="$RETRY_HTTP_CODE"
+            RELEASE_JSON=$(echo "$RELEASE_RESPONSE" | sed '$d')
+        fi
+    fi
+
     # If repo is private or token is missing/invalid
     if [ "$HTTP_CODE" = "404" ] || [ "$HTTP_CODE" = "401" ] || [ -z "$RELEASE_JSON" ]; then
         if [ "$HTTP_CODE" = "401" ]; then
@@ -289,26 +307,22 @@ elif [ -f "/tmp/${RELEASE_TARBALL}.manual" ]; then
 else
     DOWNLOAD_SUCCESS=false
     
-    # Authenticated GitHub API download (Works with private repos)
-    if [ -n "$ASSET_ID" ] && [ -n "$GITHUB_TOKEN" ]; then
+    # 1. Direct public release download (Primary for public repositories)
+    echo -e "--> Attempting direct download from GitHub Releases..."
+    if curl -fSL --progress-bar "https://github.com/${GITHUB_REPO}/releases/latest/download/${RELEASE_TARBALL}" -o "$TEMP_TARBALL" 2>/dev/null; then
+        DOWNLOAD_SUCCESS=true
+    elif [ -n "$LATEST_TAG" ] && curl -fSL --progress-bar "https://github.com/${GITHUB_REPO}/releases/download/${LATEST_TAG}/${RELEASE_TARBALL}" -o "$TEMP_TARBALL" 2>/dev/null; then
+        DOWNLOAD_SUCCESS=true
+    fi
+
+    # 2. Authenticated GitHub API download fallback (For private repositories or forks)
+    if [ "$DOWNLOAD_SUCCESS" = false ] && [ -n "$ASSET_ID" ] && [ -n "$GITHUB_TOKEN" ]; then
         echo -e "--> Downloading asset ID ${ASSET_ID} via authenticated GitHub API..."
         if curl -fSL --progress-bar \
              -H "Authorization: Bearer $GITHUB_TOKEN" \
              -H "Accept: application/octet-stream" \
              "https://api.github.com/repos/${GITHUB_REPO}/releases/assets/${ASSET_ID}" \
              -o "$TEMP_TARBALL"; then
-            DOWNLOAD_SUCCESS=true
-        else
-            echo -e "${YELLOW}Warning: Authenticated asset download failed. Trying fallback...${NC}"
-        fi
-    fi
-
-    # Public direct download fallback (If repo is public or GITHUB_TOKEN is not needed)
-    if [ "$DOWNLOAD_SUCCESS" = false ]; then
-        echo -e "--> Attempting direct asset download..."
-        if curl -fSL --progress-bar "https://github.com/${GITHUB_REPO}/releases/latest/download/${RELEASE_TARBALL}" -o "$TEMP_TARBALL" 2>/dev/null; then
-            DOWNLOAD_SUCCESS=true
-        elif [ -n "$LATEST_TAG" ] && curl -fSL --progress-bar "https://github.com/${GITHUB_REPO}/releases/download/${LATEST_TAG}/${RELEASE_TARBALL}" -o "$TEMP_TARBALL" 2>/dev/null; then
             DOWNLOAD_SUCCESS=true
         fi
     fi
