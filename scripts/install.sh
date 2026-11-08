@@ -509,6 +509,7 @@ if [ "$ALREADY_EXTRACTED" = false ]; then
         DOWNLOAD_SUCCESS=false
         API_URL="https://api.github.com/repos/${GITHUB_REPO}/releases/latest"
         ASSET_ID=""
+        RELEASE_TAG=""
 
         fetch_api() {
             local token="$1"
@@ -554,6 +555,14 @@ if [ "$ALREADY_EXTRACTED" = false ]; then
         fi
 
         if [ -n "$JSON" ]; then
+            RELEASE_TAG=$(echo "$JSON" | node -e '
+                let d=""; process.stdin.on("data", c=>d+=c); process.stdin.on("end", ()=>{
+                    try { const j=JSON.parse(d); if(j.tag_name) console.log(j.tag_name); } catch(e){}
+                });
+            ' 2>/dev/null || echo "")
+            if [ -z "$RELEASE_TAG" ]; then
+                RELEASE_TAG=$(echo "$JSON" | grep -o '"tag_name": *"[^"]*"' | head -n1 | cut -d'"' -f4 || echo "")
+            fi
             if command -v node >/dev/null 2>&1; then
                 ASSET_ID=$(echo "$JSON" | node -e '
                     let d=""; process.stdin.on("data", c=>d+=c); process.stdin.on("end", ()=>{
@@ -577,6 +586,17 @@ if [ "$ALREADY_EXTRACTED" = false ]; then
         echo -e "--> Attempting direct download from GitHub Releases..."
         if curl -fSL --progress-bar "https://github.com/${GITHUB_REPO}/releases/latest/download/${RELEASE_TARBALL}" -o "$TEMP_TARBALL" 2>/dev/null; then
             DOWNLOAD_SUCCESS=true
+        fi
+
+        # GitHub's tag-specific release URL is the reliable fallback when the
+        # latest alias is unavailable or the release is not marked latest.
+        if [ "$DOWNLOAD_SUCCESS" = false ] && [ -n "$RELEASE_TAG" ]; then
+            echo -e "--> Retrying tagged release download (${RELEASE_TAG})..."
+            if curl -fSL --progress-bar \
+                "https://github.com/${GITHUB_REPO}/releases/download/${RELEASE_TAG}/${RELEASE_TARBALL}" \
+                -o "$TEMP_TARBALL" 2>/dev/null; then
+                DOWNLOAD_SUCCESS=true
+            fi
         fi
 
         # 2. Authenticated asset download fallback (For private repositories or forks)
