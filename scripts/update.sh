@@ -46,19 +46,6 @@ fi
 GITHUB_REPO="haliknihudas666/open-piso-wifi"
 RELEASE_TARBALL="piso-wifi-release.tar.gz"
 
-# Preserve the runtime selected by the installer. Non-amd64/arm64 systems
-# must use Bun; supported systems may opt into Bun with JS_RUNTIME=bun.
-MACHINE_ARCH="$(uname -m 2>/dev/null || echo unknown)"
-JS_RUNTIME="${JS_RUNTIME:-}"
-case "$MACHINE_ARCH" in
-    x86_64|amd64|aarch64|arm64)
-        [ -z "$JS_RUNTIME" ] && JS_RUNTIME="node"
-        ;;
-    *)
-        JS_RUNTIME="bun"
-        ;;
-esac
-
 # ------------------------------------------------------------------------------
 # ARGUMENT PARSING & GITHUB TOKEN DISCOVERY
 # ------------------------------------------------------------------------------
@@ -443,16 +430,8 @@ $SUDO_CMD chmod 666 "$TARGET_PORTAL/dev.db"* 2>/dev/null || true
 if [ -d "$TARGET_DAEMON" ] && [ -f "$TARGET_DAEMON/package.json" ]; then
     if [ ! -d "$TARGET_DAEMON/node_modules/express" ]; then
         echo -e "--> Verifying Hardware Daemon production dependencies in ${TARGET_DAEMON}..."
-        if [ "$JS_RUNTIME" = "bun" ]; then
-            if ! command -v bun >/dev/null 2>&1; then
-                echo -e "${RED}Error: Bun is required for ${MACHINE_ARCH}, but it is not installed.${NC}"
-                exit 1
-            fi
-            (cd "$TARGET_DAEMON" && bun install --production --no-progress)
-        else
-            (cd "$TARGET_DAEMON" && npm install --omit=dev --loglevel=error)
-            (cd "$TARGET_DAEMON" && npm rebuild epoll --build-from-source 2>/dev/null || true)
-        fi
+        (cd "$TARGET_DAEMON" && npm install --omit=dev --loglevel=error)
+        (cd "$TARGET_DAEMON" && npm rebuild epoll --build-from-source 2>/dev/null || true)
     fi
     $SUDO_CMD chown -R "${CURRENT_USER}:${CURRENT_USER}" "$TARGET_DAEMON" 2>/dev/null || true
 fi

@@ -56,22 +56,6 @@ CLI_ADMIN_PIN=""
 CLI_COIN_PIN=""
 NON_INTERACTIVE=false
 
-# Runtime policy: Node.js is the default on supported amd64/arm64 systems.
-# Set JS_RUNTIME=bun to opt into Bun there; all other architectures require Bun.
-MACHINE_ARCH="$(uname -m 2>/dev/null || echo unknown)"
-JS_RUNTIME="${JS_RUNTIME:-}"
-case "$MACHINE_ARCH" in
-    x86_64|amd64|aarch64|arm64)
-        [ -z "$JS_RUNTIME" ] && JS_RUNTIME="node"
-        ;;
-    *)
-        if [ "$JS_RUNTIME" != "bun" ]; then
-            echo -e "${YELLOW}Architecture ${MACHINE_ARCH} requires Bun runtime; overriding JS_RUNTIME=${JS_RUNTIME:-node}.${NC}"
-            JS_RUNTIME="bun"
-        fi
-        ;;
-esac
-
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --token|-t)
@@ -444,40 +428,25 @@ echo -e "${PURPLE}[1/6] Installing minimal system runtime packages...${NC}"
 sudo apt-get update -y
 sudo DEBIAN_FRONTEND=noninteractive apt-get install -y curl tar sqlite3 openssh-client iptables-persistent netfilter-persistent build-essential python3 python3-gpiozero python3-libgpiod gpiod
 
-if [ "$JS_RUNTIME" = "bun" ]; then
-    export PATH="/usr/local/bin:$PATH"
-    BUN_BIN="$(command -v bun 2>/dev/null || true)"
-    if [ -z "$BUN_BIN" ]; then
-        echo -e "${CYAN}--> Installing Bun runtime for architecture ${MACHINE_ARCH}...${NC}"
-        curl -fsSL https://bun.sh/install | sudo BUN_INSTALL=/usr/local bash -s -- --no-modify-shell
-        BUN_BIN="$(command -v bun 2>/dev/null || true)"
-    fi
-    if [ -z "$BUN_BIN" ]; then
-        echo -e "${RED}Error: Bun is required for ${MACHINE_ARCH}, but installation failed.${NC}"
-        exit 1
-    fi
-    RUNTIME_BIN="$BUN_BIN"
-    echo -e "${GREEN}✓ Bun $($BUN_BIN --version) verified.${NC}"
+# Check Node.js version (Requires Node.js 20+)
+NEED_NODE_INSTALL=false
+if ! command -v node >/dev/null 2>&1; then
+    NEED_NODE_INSTALL=true
 else
-    # Check Node.js version (Requires Node.js 20+)
-    NEED_NODE_INSTALL=false
-    if ! command -v node >/dev/null 2>&1; then
+    NODE_MAJOR=$(node -v | cut -d'.' -f1 | sed 's/v//')
+    if [ "$NODE_MAJOR" -lt 20 ]; then
+        echo -e "${YELLOW}Existing Node.js ($NODE_MAJOR) is older than recommended Node 20 LTS.${NC}"
         NEED_NODE_INSTALL=true
-    else
-        NODE_MAJOR=$(node -v | cut -d'.' -f1 | sed 's/v//')
-        if [ "$NODE_MAJOR" -lt 20 ]; then
-            echo -e "${YELLOW}Existing Node.js ($NODE_MAJOR) is older than recommended Node 20 LTS.${NC}"
-            NEED_NODE_INSTALL=true
-        fi
     fi
-    if [ "$NEED_NODE_INSTALL" = true ]; then
-        echo -e "${CYAN}--> Installing Node.js 20 LTS (NodeSource)...${NC}"
-        curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-        sudo apt-get install -y nodejs
-    fi
-    RUNTIME_BIN="$(command -v node)"
-    echo -e "${GREEN}✓ Node.js $(node -v) & npm $(npm -v) verified.${NC}"
 fi
+
+if [ "$NEED_NODE_INSTALL" = true ]; then
+    echo -e "${CYAN}--> Installing Node.js 20 LTS (NodeSource)...${NC}"
+    curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+    sudo apt-get install -y nodejs
+fi
+
+echo -e "${GREEN}✓ Node.js $(node -v) & npm $(npm -v) verified.${NC}"
 
 # ------------------------------------------------------------------------------
 # STEP 2: CONFIGURE STATIC IP ($PORTAL_IP)
@@ -585,8 +554,8 @@ if [ "$ALREADY_EXTRACTED" = false ]; then
         fi
 
         if [ -n "$JSON" ]; then
-            if command -v "$JS_RUNTIME" >/dev/null 2>&1; then
-                ASSET_ID=$(echo "$JSON" | "$JS_RUNTIME" -e '
+            if command -v node >/dev/null 2>&1; then
+                ASSET_ID=$(echo "$JSON" | node -e '
                     let d=""; process.stdin.on("data", c=>d+=c); process.stdin.on("end", ()=>{
                         try {
                             const j=JSON.parse(d);
@@ -699,12 +668,8 @@ sudo chmod 666 "$PORTAL_DIR/prisma/dev.db"* 2>/dev/null || true
 # Install minimal production daemon dependencies (only 3 packages for hardware GPIO & SSH: express, onoff, ssh2)
 echo -e "--> Verifying Hardware Daemon production dependencies in ${DAEMON_DIR}..."
 if [ -d "$DAEMON_DIR" ] && [ -f "$DAEMON_DIR/package.json" ]; then
-    if [ "$JS_RUNTIME" = "bun" ]; then
-        (cd "$DAEMON_DIR" && "$BUN_BIN" install --production --no-progress)
-    else
-        (cd "$DAEMON_DIR" && npm install --omit=dev --loglevel=error)
-        (cd "$DAEMON_DIR" && npm rebuild epoll --build-from-source 2>/dev/null || true)
-    fi
+    (cd "$DAEMON_DIR" && npm install --omit=dev --loglevel=error)
+    (cd "$DAEMON_DIR" && npm rebuild epoll --build-from-source 2>/dev/null || true)
 fi
 sudo chown -R ${CURRENT_USER}:${CURRENT_USER} "$DAEMON_DIR" 2>/dev/null || true
 
@@ -752,7 +717,7 @@ ${CURRENT_USER} ALL=(ALL) NOPASSWD: /bin/systemctl, /usr/bin/systemctl, /bin/sys
 EOF
 sudo chmod 0440 /etc/sudoers.d/openpisowifi
 
-# 1. Daemon Service (Runs bundled JavaScript with the selected runtime)
+# 1. Daemon Service (Runs bundled JavaScript directly with Node.js and EnvironmentFile)
 sudo tee /etc/systemd/system/pisowifi-daemon.service > /dev/null << EOF
 [Unit]
 Description=OpenPisoWiFi Hardware Daemon & Router Controller
@@ -767,7 +732,7 @@ ExecStartPre=-/sbin/iptables -t nat -C PREROUTING -p tcp --dport 80 -j REDIRECT 
 ExecStartPre=-/sbin/iptables -t nat -A PREROUTING -p tcp --dport 80 -j REDIRECT --to-port ${PORTAL_PORT}
 ExecStartPre=-/sbin/iptables -t nat -C OUTPUT -p tcp -o lo --dport 80 -j REDIRECT --to-port ${PORTAL_PORT}
 ExecStartPre=-/sbin/iptables -t nat -A OUTPUT -p tcp -o lo --dport 80 -j REDIRECT --to-port ${PORTAL_PORT}
-ExecStart=${RUNTIME_BIN} dist/index.js
+ExecStart=/usr/bin/node dist/index.js
 Restart=always
 RestartSec=3
 
@@ -775,7 +740,7 @@ RestartSec=3
 WantedBy=multi-user.target
 EOF
 
-# 2. Portal Service (Runs Next.js Standalone server.js with the selected runtime)
+# 2. Portal Service (Runs Next.js Standalone server.js directly with Node.js and EnvironmentFile)
 sudo tee /etc/systemd/system/pisowifi-portal.service > /dev/null << EOF
 [Unit]
 Description=OpenPisoWiFi Next.js Captive Portal
@@ -786,7 +751,7 @@ Type=simple
 User=${CURRENT_USER}
 WorkingDirectory=${PORTAL_DIR}
 EnvironmentFile=-${PORTAL_DIR}/.env
-ExecStart=${RUNTIME_BIN} server.js
+ExecStart=/usr/bin/node server.js
 Restart=always
 RestartSec=3
 Environment=NODE_ENV=production
