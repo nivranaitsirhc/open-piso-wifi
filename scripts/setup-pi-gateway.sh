@@ -3,8 +3,8 @@
 # 🚀 OpenPisoWiFi - Raspberry Pi Standalone Gateway Setup (Profile 2)
 # ==============================================================================
 # Turns a Raspberry Pi into a universal router & captive portal gateway.
-# - Pi eth0 = WAN (Connected to ISP modem/ONT via DHCP)
-# - Pi eth1 = LAN 10.0.0.1/22 (Connected to ANY Access Point in AP/bridge mode)
+# - The built-in Ethernet is preferred as WAN (ISP modem/ONT via DHCP)
+# - A USB Ethernet adapter is preferred as LAN (connected to an AP/bridge)
 # - nftables: Kernel-level hardware-speed NAT, authorization sets, and captive redirect
 # - dnsmasq: DHCP server (10.0.0.10 - 10.0.3.250) + captive DNS responder
 #
@@ -24,9 +24,10 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-# Default Configuration Parameters
-WAN_IFACE="${WAN_IFACE:-eth0}"
-LAN_IFACE="${LAN_IFACE:-eth1}"
+# Default Configuration Parameters. Interface names are detected below when
+# callers do not provide WAN_IFACE/LAN_IFACE explicitly.
+WAN_IFACE="${WAN_IFACE:-}"
+LAN_IFACE="${LAN_IFACE:-}"
 LAN_IP="${LAN_IP:-10.0.0.1}"
 LAN_PREFIX="${LAN_PREFIX:-22}"
 LAN_NETMASK="${LAN_NETMASK:-255.255.252.0}"
@@ -66,6 +67,51 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+detect_gateway_interfaces() {
+  local iface bus
+  local -a ethernet_ifaces=() usb_ifaces=() builtin_ifaces=()
+
+  for iface in /sys/class/net/*; do
+    [ -e "$iface" ] || continue
+    iface="$(basename "$iface")"
+    [ "$iface" = "lo" ] && continue
+    [ -e "/sys/class/net/$iface/device" ] || continue
+    [ "$(cat "/sys/class/net/$iface/type" 2>/dev/null || echo 0)" = "1" ] || continue
+    ethernet_ifaces+=("$iface")
+    bus="$(udevadm info --query=property --path="/sys/class/net/$iface" 2>/dev/null | awk -F= '$1=="ID_BUS" {print $2; exit}')"
+    if [ "$bus" = "usb" ]; then
+      usb_ifaces+=("$iface")
+    else
+      builtin_ifaces+=("$iface")
+    fi
+  done
+
+  if [ -z "$WAN_IFACE" ]; then
+    if [ ${#builtin_ifaces[@]} -gt 0 ]; then
+      WAN_IFACE="${builtin_ifaces[0]}"
+    elif [ ${#ethernet_ifaces[@]} -gt 0 ]; then
+      WAN_IFACE="${ethernet_ifaces[0]}"
+    fi
+  fi
+  if [ -z "$LAN_IFACE" ]; then
+    if [ ${#usb_ifaces[@]} -gt 0 ]; then
+      LAN_IFACE="${usb_ifaces[0]}"
+    else
+      for iface in "${ethernet_ifaces[@]}"; do
+        [ "$iface" != "$WAN_IFACE" ] && { LAN_IFACE="$iface"; break; }
+      done
+    fi
+  fi
+
+  if [ -z "$WAN_IFACE" ] || [ -z "$LAN_IFACE" ] || [ "$WAN_IFACE" = "$LAN_IFACE" ]; then
+    echo -e "${RED}❌ Could not detect two distinct Ethernet interfaces.${NC}" >&2
+    echo -e "${YELLOW}Set WAN_IFACE and LAN_IFACE explicitly or use --wan-iface/--lan-iface.${NC}" >&2
+    exit 1
+  fi
+}
+
+detect_gateway_interfaces
 
 # ------------------------------------------------------------------------------
 # STATUS CHECK

@@ -105,6 +105,29 @@ DYNAMIC_HOST_IP=$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++)
 [ -z "$DYNAMIC_HOST_IP" ] && DYNAMIC_HOST_IP=$(hostname -I 2>/dev/null | awk '{print $1}' || true)
 DYNAMIC_GATEWAY_IP=$(ip -4 route show default 2>/dev/null | awk '/default/ {for(i=1;i<=NF;i++) if($i=="via") print $(i+1)}' || true)
 
+# Prefer the first physical non-USB Ethernet interface for the portal LAN.
+# Armbian/Ubuntu may use names such as end0 or enx..., so never assume eth0.
+detect_portal_interface() {
+    local iface bus
+    local -a ethernet_ifaces=() builtin_ifaces=()
+    for iface in /sys/class/net/*; do
+        [ -e "$iface" ] || continue
+        iface="$(basename "$iface")"
+        [ "$iface" = "lo" ] && continue
+        [ -e "/sys/class/net/$iface/device" ] || continue
+        [ "$(cat "/sys/class/net/$iface/type" 2>/dev/null || echo 0)" = "1" ] || continue
+        ethernet_ifaces+=("$iface")
+        bus="$(udevadm info --query=property --path="/sys/class/net/$iface" 2>/dev/null | awk -F= '$1=="ID_BUS" {print $2; exit}')"
+        [ "$bus" != "usb" ] && builtin_ifaces+=("$iface")
+    done
+    if [ ${#builtin_ifaces[@]} -gt 0 ]; then
+        printf '%s\n' "${builtin_ifaces[0]}"
+    elif [ ${#ethernet_ifaces[@]} -gt 0 ]; then
+        printf '%s\n' "${ethernet_ifaces[0]}"
+    fi
+}
+PORTAL_IFACE="$(detect_portal_interface)"
+
 DEFAULT_PORTAL_IP="${DYNAMIC_HOST_IP:-}"
 DEFAULT_ROUTER_IP="${DYNAMIC_GATEWAY_IP:-}"
 DEFAULT_PORTAL_DOMAIN="wifi.local"
@@ -432,7 +455,10 @@ echo ""
 echo -e "${PURPLE}[2/6] Configuring Static LAN IP (${PORTAL_IP})...${NC}"
 
 if command -v nmcli >/dev/null 2>&1 && systemctl is-active --quiet NetworkManager; then
-    ETH_CONN=$(nmcli -t -f NAME,TYPE connection show | grep ':802-3-ethernet' | head -n1 | cut -d':' -f1 || echo "")
+    ETH_CONN=""
+    if [ -n "$PORTAL_IFACE" ]; then
+        ETH_CONN=$(nmcli -g GENERAL.CONNECTION device show "$PORTAL_IFACE" 2>/dev/null | sed '/^--$/d' | head -n1 || true)
+    fi
     if [ -n "$ETH_CONN" ]; then
         echo -e "--> Setting static IP on NetworkManager connection: ${ETH_CONN}"
         sudo nmcli connection modify "$ETH_CONN" \
@@ -448,7 +474,7 @@ elif [ -f /etc/dhcpcd.conf ]; then
         sudo tee -a /etc/dhcpcd.conf > /dev/null << EOF
 
 # OpenPisoWifi Static IP Configuration
-interface eth0
+interface ${PORTAL_IFACE}
 static ip_address=${PORTAL_IP}/24
 static routers=${ROUTER_IP}
 static domain_name_servers=1.1.1.1 8.8.8.8
