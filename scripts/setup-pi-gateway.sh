@@ -221,7 +221,11 @@ if [ "$ROLLBACK" = true ]; then
   if command -v nft >/dev/null 2>&1; then
     nft delete table inet piso 2>/dev/null || true
   fi
+  if [ -f /etc/nftables.conf ]; then
+    sed -i '\|^include "/etc/nftables.d/openpiso-gateway.nft"$|d' /etc/nftables.conf
+  fi
   rm -f /etc/nftables.d/openpiso-gateway.nft
+  systemctl restart nftables 2>/dev/null || true
 
   # Remove sysctl
   rm -f /etc/sysctl.d/99-openpiso-gateway.conf
@@ -360,6 +364,8 @@ echo -e "${GREEN}✅ dnsmasq active on ${LAN_IFACE}.${NC}"
 # ------------------------------------------------------------------------------
 echo -e "${CYAN}🛡️ Applying nftables NAT & Authorization Sets...${NC}"
 NFT_FILE="/etc/nftables.d/openpiso-gateway.nft"
+NFTABLES_MAIN_CONF="/etc/nftables.conf"
+NFTABLES_INCLUDE="include \"${NFT_FILE}\""
 
 if [ "$DRY_RUN" = false ]; then
   mkdir -p /etc/nftables.d
@@ -448,7 +454,18 @@ table inet piso {
 }
 EOF
 
-  nft -f "$NFT_FILE"
+  # Persist the gateway rules across nftables service restarts and reboots.
+  # Armbian may not include /etc/nftables.d by default, so add an explicit,
+  # idempotent include to the distro's main nftables configuration.
+  touch "$NFTABLES_MAIN_CONF"
+  if ! grep -Fqx "$NFTABLES_INCLUDE" "$NFTABLES_MAIN_CONF"; then
+    printf '\n%s\n' "$NFTABLES_INCLUDE" >> "$NFTABLES_MAIN_CONF"
+  fi
+
+  if ! nft -c -f "$NFTABLES_MAIN_CONF"; then
+    echo -e "${RED}❌ nftables configuration validation failed; gateway rules were not activated.${NC}" >&2
+    exit 1
+  fi
 
   # Ensure nftables starts on system boot
   systemctl enable nftables

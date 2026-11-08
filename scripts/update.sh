@@ -104,6 +104,54 @@ if [ -z "$GITHUB_TOKEN" ] && [ -f "$HOME/.github_token" ]; then
     GITHUB_TOKEN=$(cat "$HOME/.github_token" | tr -d '\r\n ')
 fi
 
+ensure_local_linux_nftables() {
+    local nft_main="/etc/nftables.conf"
+    local nft_gateway="/etc/nftables.d/openpiso-gateway.nft"
+    local nft_include="include \"${nft_gateway}\""
+    local nft_backup=""
+    local reload_required=false
+
+    if ! command -v nft >/dev/null 2>&1; then
+        echo -e "${YELLOW}⚠️ nft is not installed; skipping local gateway nftables verification.${NC}"
+        return 0
+    fi
+
+    if [ ! -f "$nft_gateway" ]; then
+        echo -e "${YELLOW}⚠️ Local gateway rules were not found at ${nft_gateway}; run setup-pi-gateway.sh.${NC}"
+        return 0
+    fi
+
+    $SUDO_CMD touch "$nft_main"
+    if ! $SUDO_CMD grep -Fqx "$nft_include" "$nft_main"; then
+        echo -e "--> Adding persistent local gateway include to ${nft_main}..."
+        nft_backup=$(mktemp)
+        $SUDO_CMD cp "$nft_main" "$nft_backup"
+        printf '\n%s\n' "$nft_include" | $SUDO_CMD tee -a "$nft_main" >/dev/null
+        reload_required=true
+    fi
+
+    if ! $SUDO_CMD nft -c -f "$nft_main"; then
+        if [ -n "$nft_backup" ]; then
+            $SUDO_CMD cp "$nft_backup" "$nft_main"
+        fi
+        [ -n "$nft_backup" ] && rm -f "$nft_backup"
+        echo -e "${YELLOW}⚠️ Local gateway nftables configuration failed validation; the previous configuration was preserved.${NC}"
+        return 0
+    fi
+
+    if ! $SUDO_CMD nft list table inet piso >/dev/null 2>&1; then
+        reload_required=true
+    fi
+
+    if [ "$reload_required" = true ]; then
+        echo -e "--> Loading persistent local gateway nftables rules..."
+        $SUDO_CMD systemctl restart nftables
+    fi
+
+    [ -n "$nft_backup" ] && rm -f "$nft_backup"
+    echo -e "${GREEN}✓ Local gateway nftables configuration verified.${NC}"
+}
+
 # Check sudo access (probe systemctl first as it is explicitly granted in sudoers)
 SUDO_CMD=""
 HAS_SUDO_ACCESS=false
@@ -487,6 +535,7 @@ echo -e "${GREEN}✓ Database verified and restored with zero data loss.${NC}"
 echo ""
 if [ "$ROUTER_MODE" = "local" ] || [ "$ROUTER_MODE" = "local_linux" ]; then
     echo -e "${PURPLE}[5/6] Skipping OpenWrt Router update (local Linux gateway mode)...${NC}"
+    ensure_local_linux_nftables
     echo -e "${GREEN}✓ Local nftables/dnsmasq gateway configuration preserved.${NC}"
 else
 echo -e "${PURPLE}[5/6] Updating OpenWrt Router configuration (Preserving State)...${NC}"
