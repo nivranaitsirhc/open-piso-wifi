@@ -69,23 +69,64 @@ while [[ $# -gt 0 ]]; do
 done
 
 detect_gateway_interfaces() {
-  local iface bus
+  local iface_path iface device_path operstate
   local -a ethernet_ifaces=() usb_ifaces=() builtin_ifaces=()
 
-  for iface in /sys/class/net/*; do
-    [ -e "$iface" ] || continue
-    iface="$(basename "$iface")"
-    [ "$iface" = "lo" ] && continue
-    [ -e "/sys/class/net/$iface/device" ] || continue
-    [ "$(cat "/sys/class/net/$iface/type" 2>/dev/null || echo 0)" = "1" ] || continue
+  is_physical_ethernet() {
+    local candidate="$1"
+    [ "$candidate" != "lo" ] || return 1
+    [ -e "/sys/class/net/$candidate/device" ] || return 1
+    [ "$(cat "/sys/class/net/$candidate/type" 2>/dev/null || echo 0)" = "1" ] || return 1
+    [ ! -e "/sys/class/net/$candidate/wireless" ] || return 1
+    return 0
+  }
+
+  # Predictable names (end0, enP..., enx...) are normal. Inspecting the
+  # resolved sysfs device path works on Armbian even when udev properties are
+  # incomplete or udevadm is unavailable.
+  for iface_path in /sys/class/net/*; do
+    [ -e "$iface_path" ] || continue
+    iface="$(basename "$iface_path")"
+    is_physical_ethernet "$iface" || continue
     ethernet_ifaces+=("$iface")
-    bus="$(udevadm info --query=property --path="/sys/class/net/$iface" 2>/dev/null | awk -F= '$1=="ID_BUS" {print $2; exit}')"
-    if [ "$bus" = "usb" ]; then
+    device_path="$(readlink -f "/sys/class/net/$iface/device" 2>/dev/null || true)"
+    if [[ "$device_path" == */usb/* ]]; then
       usb_ifaces+=("$iface")
     else
       builtin_ifaces+=("$iface")
     fi
   done
+
+  # Sort by interface name for deterministic selection across boots.
+  if [ ${#builtin_ifaces[@]} -gt 0 ]; then
+    IFS=$'\n' builtin_ifaces=($(printf '%s\n' "${builtin_ifaces[@]}" | sort -V))
+  fi
+  if [ ${#usb_ifaces[@]} -gt 0 ]; then
+    IFS=$'\n' usb_ifaces=($(printf '%s\n' "${usb_ifaces[@]}" | sort -V))
+  fi
+  if [ ${#ethernet_ifaces[@]} -gt 0 ]; then
+    IFS=$'\n' ethernet_ifaces=($(printf '%s\n' "${ethernet_ifaces[@]}" | sort -V))
+  fi
+
+  echo -e "${CYAN}Detected physical Ethernet interfaces:${NC}"
+  for iface in "${ethernet_ifaces[@]}"; do
+    operstate="$(cat "/sys/class/net/$iface/operstate" 2>/dev/null || echo unknown)"
+    device_path="$(readlink -f "/sys/class/net/$iface/device" 2>/dev/null || true)"
+    if [[ "$device_path" == */usb/* ]]; then
+      echo -e "  • ${iface} (USB Ethernet, ${operstate})"
+    else
+      echo -e "  • ${iface} (built-in/PCI Ethernet, ${operstate})"
+    fi
+  done
+
+  if [ -n "${WAN_IFACE}" ] && ! is_physical_ethernet "$WAN_IFACE"; then
+    echo -e "${RED}❌ WAN_IFACE='${WAN_IFACE}' is not a physical Ethernet interface.${NC}" >&2
+    exit 1
+  fi
+  if [ -n "${LAN_IFACE}" ] && ! is_physical_ethernet "$LAN_IFACE"; then
+    echo -e "${RED}❌ LAN_IFACE='${LAN_IFACE}' is not a physical Ethernet interface.${NC}" >&2
+    exit 1
+  fi
 
   if [ -z "$WAN_IFACE" ]; then
     if [ ${#builtin_ifaces[@]} -gt 0 ]; then
@@ -109,6 +150,8 @@ detect_gateway_interfaces() {
     echo -e "${YELLOW}Set WAN_IFACE and LAN_IFACE explicitly or use --wan-iface/--lan-iface.${NC}" >&2
     exit 1
   fi
+
+  echo -e "${GREEN}Selected WAN=${WAN_IFACE}, LAN=${LAN_IFACE}.${NC}"
 }
 
 detect_gateway_interfaces
