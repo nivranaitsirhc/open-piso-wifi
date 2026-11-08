@@ -173,9 +173,19 @@ export default function AdminPage() {
     fetcher
   );
 
+  // The daemon is the authority for whether this installation controls a
+  // remote OpenWrt router or acts as a local Linux gateway.
+  const { data: gatewayCapabilities, mutate: mutateGatewayCapabilities } = useSWR(
+    isAuthenticated ? '/api/admin/gateway/capabilities' : null,
+    fetcher,
+    { refreshInterval: 15000 }
+  );
+  const isLocalGateway = gatewayCapabilities?.gatewayType === 'local_linux';
+  const showRemoteRouter = gatewayCapabilities?.gatewayType === 'openwrt_ssh' || gatewayCapabilities?.gatewayType === 'simulation';
+
   // Poll Router Wi-Fi Config
   const { data: wifiData, mutate: mutateWifi } = useSWR(
-    isAuthenticated ? '/api/admin/router/wifi' : null,
+    isAuthenticated && showRemoteRouter ? '/api/admin/router/wifi' : null,
     fetcher
   );
 
@@ -185,6 +195,12 @@ export default function AdminPage() {
     fetcher,
     { refreshInterval: 15000 }
   );
+
+  useEffect(() => {
+    if (isLocalGateway && activeTab === 'router') {
+      setActiveTab('system');
+    }
+  }, [activeTab, isLocalGateway]);
 
   const handleLogout = () => {
     sessionStorage.removeItem('openpisowifi_admin_pin');
@@ -198,6 +214,7 @@ export default function AdminPage() {
     mutateSettings();
     mutateWifi();
     mutateVersion();
+    mutateGatewayCapabilities();
   };
 
   if (isAuthenticated === null) {
@@ -227,6 +244,7 @@ export default function AdminPage() {
         onCloseMobile={() => setIsMobileDrawerOpen(false)}
         activeSessionsCount={sessionsData?.sessions?.length || 0}
         totalVouchersCount={vouchersData?.vouchers?.length || 0}
+        gatewayType={gatewayCapabilities?.gatewayType}
         onLogout={handleLogout}
       />
 
@@ -334,7 +352,7 @@ export default function AdminPage() {
             )}
 
             {/* Tab 2: Router & Wi-Fi Management */}
-            {activeTab === 'router' && (
+            {activeTab === 'router' && showRemoteRouter && (
               <div className="space-y-6">
                 <RouterWifiCard
                   initialSettings={settingsData}
@@ -353,9 +371,9 @@ export default function AdminPage() {
             {/* Tab 4: System, Git Updates & Telemetry */}
             {activeTab === 'system' && (
               <div className="space-y-6">
-                <SystemUpdateCard />
-                <SystemHealthCard />
-                <SystemMaintenanceCard />
+                <SystemUpdateCard gatewayType={gatewayCapabilities?.gatewayType} />
+                <SystemHealthCard gatewayType={gatewayCapabilities?.gatewayType} />
+                <SystemMaintenanceCard gatewayType={gatewayCapabilities?.gatewayType} />
               </div>
             )}
 

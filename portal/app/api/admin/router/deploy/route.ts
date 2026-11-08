@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
 import path from 'node:path';
+import { getGatewayCapabilities } from '@/lib/daemon';
 
 const execAsync = promisify(exec);
 
@@ -9,6 +10,11 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
   try {
+    const capabilities = await getGatewayCapabilities();
+    if (capabilities.gatewayType === 'local_linux') {
+      return NextResponse.json({ error: 'OpenWrt deployment is unavailable in local Linux gateway mode.' }, { status: 409 });
+    }
+
     const rootDir = path.resolve(process.cwd(), '..');
     const deployScript = path.join(rootDir, 'scripts', 'deploy-router.sh');
 

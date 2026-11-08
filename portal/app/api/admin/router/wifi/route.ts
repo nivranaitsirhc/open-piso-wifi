@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getRouterWifiConfig, updateRouterWifiConfig } from '@/lib/daemon';
+import { getGatewayCapabilities, getRouterWifiConfig, updateRouterWifiConfig } from '@/lib/daemon';
 import { prisma, ensureSqlitePragmas } from '@/lib/prisma';
 
 export const dynamic = 'force-dynamic';
@@ -7,6 +7,10 @@ export const dynamic = 'force-dynamic';
 export async function GET() {
   await ensureSqlitePragmas();
   try {
+    const capabilities = await getGatewayCapabilities();
+    if (!capabilities.wifiConfig) {
+      return NextResponse.json({ error: 'Wi-Fi configuration is managed by the external access point in local gateway mode.' }, { status: 409 });
+    }
     const config = await getRouterWifiConfig();
     const unifiedSetting = await prisma.setting.findUnique({
       where: { key: 'wifi_unified_ssid' },
@@ -28,6 +32,10 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   await ensureSqlitePragmas();
   try {
+    const capabilities = await getGatewayCapabilities();
+    if (!capabilities.wifiConfig) {
+      return NextResponse.json({ error: 'Wi-Fi configuration is managed by the external access point in local gateway mode.' }, { status: 409 });
+    }
     const body = await request.json();
     let { ssid2g, ssid5g, channel2g, channel5g, unified } = body;
 

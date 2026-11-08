@@ -10,7 +10,11 @@ import { formatRemainingTime } from '@/lib/utils';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
-export function SystemHealthCard() {
+interface SystemHealthCardProps {
+  gatewayType?: 'openwrt_ssh' | 'local_linux' | 'simulation';
+}
+
+export function SystemHealthCard({ gatewayType }: SystemHealthCardProps) {
   const { data, mutate, isValidating } = useSWR('/api/admin/system/health', fetcher, {
     refreshInterval: 5000,
   });
@@ -19,6 +23,7 @@ export function SystemHealthCard() {
 
   const rpi = data?.rpi;
   const router = data?.router;
+  const showOpenWrtTelemetry = gatewayType === 'openwrt_ssh' || gatewayType === 'simulation';
 
   const tempColor =
     (rpi?.cpuTempC || 0) < 55
@@ -46,7 +51,9 @@ export function SystemHealthCard() {
           </div>
           <div>
             <CardTitle>Hardware Health & Telemetry</CardTitle>
-            <p className="text-xs text-neutral-600 dark:text-[#b7c6c2] font-semibold">Real-time status of Raspberry Pi & OpenWrt router</p>
+            <p className="text-xs text-neutral-600 dark:text-[#b7c6c2] font-semibold">
+              {showOpenWrtTelemetry ? 'Real-time status of Raspberry Pi & OpenWrt router' : 'Real-time status of the local Linux gateway'}
+            </p>
           </div>
         </div>
 
@@ -144,7 +151,7 @@ export function SystemHealthCard() {
         </div>
 
         {/* OpenWrt Router Telemetry */}
-        <div className="p-4 rounded-xl bg-[#f8f6ee] dark:bg-[#111713] border-2 border-black dark:border-[#4a6052] space-y-3.5 shadow-neo-sm">
+        {showOpenWrtTelemetry && <div className="p-4 rounded-xl bg-[#f8f6ee] dark:bg-[#111713] border-2 border-black dark:border-[#4a6052] space-y-3.5 shadow-neo-sm">
           <div className="flex items-center justify-between border-b-2 border-black/10 dark:border-white/10 pb-2">
             <span className="text-xs font-black uppercase text-black dark:text-white flex items-center gap-1.5 font-display">
               📡 Ruijie OpenWrt Router
@@ -202,7 +209,7 @@ export function SystemHealthCard() {
             <span>Active DHCP Leases</span>
             <span className="font-mono font-black text-black dark:text-[#ffe17c]">{router?.dhcpLeasesCount || 0} devices</span>
           </div>
-        </div>
+        </div>}
       </div>
     </Card>
 

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { exec } from 'node:child_process';
-import { rebootOpenWrtRouter, flushRouterSessions } from '@/lib/daemon';
+import { getGatewayCapabilities, rebootOpenWrtRouter, flushRouterSessions } from '@/lib/daemon';
 import { prisma, ensureSqlitePragmas } from '@/lib/prisma';
 
 export const dynamic = 'force-dynamic';
@@ -14,6 +14,10 @@ export async function POST(request: NextRequest) {
 
     switch (action) {
       case 'reboot_router': {
+        const capabilities = await getGatewayCapabilities();
+        if (capabilities.gatewayType === 'local_linux') {
+          return NextResponse.json({ error: 'OpenWrt router reboot is unavailable in local Linux gateway mode.' }, { status: 409 });
+        }
         const result = await rebootOpenWrtRouter();
         return NextResponse.json(result);
       }

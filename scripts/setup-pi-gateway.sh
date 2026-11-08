@@ -33,6 +33,8 @@ LAN_PREFIX="${LAN_PREFIX:-22}"
 LAN_NETMASK="${LAN_NETMASK:-255.255.252.0}"
 DHCP_RANGE="${DHCP_RANGE:-10.0.0.10,10.0.3.250,255.255.252.0,12h}"
 PORTAL_PORT="${PORTAL_PORT:-3000}"
+INSTALL_ROOT="${OPENPISOWIFI_INSTALL_DIR:-/opt/open-piso-wifi}"
+DAEMON_ENV_FILE="${INSTALL_ROOT}/daemon/.env"
 
 DRY_RUN=false
 ROLLBACK=false
@@ -156,6 +158,27 @@ detect_gateway_interfaces() {
 
 detect_gateway_interfaces
 
+persist_daemon_gateway_config() {
+  mkdir -p "$(dirname "$DAEMON_ENV_FILE")"
+  touch "$DAEMON_ENV_FILE"
+
+  set_env_value() {
+    local key="$1"
+    local value="$2"
+    if grep -q "^${key}=" "$DAEMON_ENV_FILE"; then
+      sed -i "s|^${key}=.*|${key}=${value}|" "$DAEMON_ENV_FILE"
+    else
+      printf '%s=%s\n' "$key" "$value" >> "$DAEMON_ENV_FILE"
+    fi
+  }
+
+  # The daemon uses ROUTER_MODE to select the local Linux gateway backend.
+  # Keep the detected interfaces available to local firewall/QoS commands.
+  set_env_value "ROUTER_MODE" "local_linux"
+  set_env_value "ROUTER_WAN_INTERFACE" "$WAN_IFACE"
+  set_env_value "ROUTER_LAN_INTERFACE" "$LAN_IFACE"
+}
+
 # ------------------------------------------------------------------------------
 # STATUS CHECK
 # ------------------------------------------------------------------------------
@@ -206,6 +229,11 @@ if [ "$ROLLBACK" = true ]; then
 
   echo -e "${GREEN}✅ Rollback completed. Gateway settings removed.${NC}"
   exit 0
+fi
+
+if [ "$DRY_RUN" = false ]; then
+  persist_daemon_gateway_config
+  echo -e "${GREEN}✅ Daemon configured for local Linux gateway mode.${NC}"
 fi
 
 echo -e "${CYAN}==============================================================${NC}"
@@ -439,6 +467,6 @@ echo -e "• WAN Interface : ${YELLOW}${WAN_IFACE}${NC} (DHCP client to ISP mode
 echo -e "• LAN Interface : ${YELLOW}${LAN_IFACE}${NC} (Static ${LAN_IP}/${LAN_PREFIX})"
 echo -e "• Next Steps:"
 echo -e "  1. Plug Ethernet from LAN (${LAN_IFACE}) into ANY Wi-Fi Access Point (set in AP/Bridge mode)."
-echo -e "  2. Set GATEWAY_MODE=local_linux in your daemon/.env configuration."
-echo -e "  3. Start the OpenPisoWiFi daemon & portal (systemctl restart pisowifi-daemon)."
+echo -e "  2. Daemon mode and detected interfaces were saved to ${DAEMON_ENV_FILE}."
+echo -e "  3. Start the OpenPisoWiFi daemon & portal (systemctl restart pisowifi-daemon pisowifi-portal)."
 echo -e "${CYAN}==============================================================${NC}"

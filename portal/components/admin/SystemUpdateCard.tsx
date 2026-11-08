@@ -9,7 +9,12 @@ import { Badge } from '@/components/ui/Badge';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
-export function SystemUpdateCard() {
+interface SystemUpdateCardProps {
+  gatewayType?: 'openwrt_ssh' | 'local_linux' | 'simulation';
+}
+
+export function SystemUpdateCard({ gatewayType }: SystemUpdateCardProps) {
+  const isLocalGateway = gatewayType === 'local_linux';
   const { data: versionData, mutate: mutateVersion, isValidating } = useSWR(
     '/api/admin/system/version',
     fetcher
@@ -31,9 +36,9 @@ export function SystemUpdateCard() {
 
   const handleTriggerUpdate = async (force: boolean = false) => {
     const confirmPrompt = force
-      ? `Force re-download and re-install the latest release bundle?\n\n• Re-downloads and replaces system binaries with fresh copies from GitHub Releases\n• All database records (dev.db), vouchers, sales, and settings will be safely preserved\n• OpenWrt router firewall rules & services will be refreshed\n\nProceed with Force Re-install?`
+      ? `Force re-download and re-install the latest release bundle?\n\n• Re-downloads and replaces system binaries with fresh copies from GitHub Releases\n• All database records (dev.db), vouchers, sales, and settings will be safely preserved\n• ${isLocalGateway ? 'Local nftables and gateway configuration will be preserved' : 'OpenWrt router firewall rules & services will be refreshed'}\n\nProceed with Force Re-install?`
       : hasUpdate
-      ? `Update system to ${versionData?.latestVersion} now?\n\n• Pre-built bundle will be downloaded instantly (no client-side builds)\n• Your database, settings, and vouchers will be preserved\n• OpenWrt router will be updated without disconnecting active Wi-Fi users`
+      ? `Update system to ${versionData?.latestVersion} now?\n\n• Pre-built bundle will be downloaded instantly (no client-side builds)\n• Your database, settings, and vouchers will be preserved\n• ${isLocalGateway ? 'Local Linux gateway configuration will be preserved' : 'OpenWrt router will be updated without disconnecting active Wi-Fi users'}`
       : `Run normal system update check now? If the system is already up to date, it will exit cleanly without modifying files.`;
 
     if (!confirm(confirmPrompt)) {

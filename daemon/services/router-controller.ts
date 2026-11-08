@@ -170,6 +170,8 @@ export class RouterController {
       privateKeyPath: process.env.ROUTER_SSH_KEY_PATH || (isLinux ? '/root/.ssh/id_rsa' : undefined),
       password: process.env.ROUTER_PASSWORD || undefined,
       mode: (process.env.ROUTER_MODE as RouterMode) || defaultMode,
+      lanInterface: process.env.ROUTER_LAN_INTERFACE || process.env.LAN_IFACE || undefined,
+      wanInterface: process.env.ROUTER_WAN_INTERFACE || process.env.WAN_IFACE || undefined,
       ...customConfig,
     };
 
@@ -666,6 +668,10 @@ fi
    * Retrieves active Wi-Fi configuration (SSIDs, channels, enabled state) from OpenWrt.
    */
   public async getWifiConfig(): Promise<WifiConfig> {
+    if (this.config.mode === 'local' || this.config.mode === 'local_linux') {
+      throw new Error('Wi-Fi configuration is managed by the external access point in local gateway mode.');
+    }
+
     if (this.config.mode === 'simulation') {
       return {
         ssid2g: 'OpenPisoWiFi',
@@ -739,6 +745,10 @@ echo "DIS_5G: $DIS_5G"
     channel2g?: string;
     channel5g?: string;
   }): Promise<{ success: boolean; error?: string }> {
+    if (this.config.mode === 'local' || this.config.mode === 'local_linux') {
+      return { success: false, error: 'Wi-Fi configuration is managed by the external access point in local gateway mode.' };
+    }
+
     if (this.config.mode === 'simulation') {
       console.log('[SIMULATOR] Wi-Fi config updated:', params);
       return { success: true };
@@ -780,6 +790,10 @@ echo "DIS_5G: $DIS_5G"
    * Safely triggers a remote reboot on the OpenWrt router.
    */
   public async rebootRouter(): Promise<{ success: boolean; message: string }> {
+    if (this.config.mode === 'local' || this.config.mode === 'local_linux') {
+      return { success: false, message: 'OpenWrt router reboot is unavailable in local Linux gateway mode.' };
+    }
+
     if (this.config.mode === 'simulation') {
       return { success: true, message: 'Simulation Router Rebooting (Mock)' };
     }
@@ -1438,28 +1452,37 @@ nft list set inet piso_portal piso_blacklist 2>/dev/null || nft list set inet fw
       return { success: true };
     }
 
-    const command = `
-# 1. Disable firewall flow offloading so traffic control is not bypassed
+    const isLocalGateway = this.config.mode === 'local' || this.config.mode === 'local_linux';
+    const lanInterface = (this.config.lanInterface || (isLocalGateway ? 'eth1' : 'br-lan')).replace(/[^a-zA-Z0-9_.:-]/g, '');
+    const wanInterface = (this.config.wanInterface || '').replace(/[^a-zA-Z0-9_.:-]/g, '');
+    const flowOffloadCommands = isLocalGateway ? '' : `
+# Disable OpenWrt firewall flow offloading so traffic control is not bypassed
 uci set firewall.@defaults[0].flow_offloading='0' 2>/dev/null || true
 uci set firewall.@defaults[0].flow_offloading_hw='0' 2>/dev/null || true
 uci commit firewall 2>/dev/null || true
+`;
+    const wanDiscovery = wanInterface
+      ? `WAN_IF='${wanInterface}'`
+      : `WAN_IF=$(uci -q get network.wan.device || uci -q get network.wan.ifname || ip route show default 2>/dev/null | awk '{print $5}' || echo "wan")`;
 
-# 2. Discover active WAN interface dynamically
-WAN_IF=$(uci -q get network.wan.device || uci -q get network.wan.ifname || ip route show default 2>/dev/null | awk '{print $5}' || echo "wan")
+    const command = `
+${flowOffloadCommands}
+# Discover the active WAN interface
+${wanDiscovery}
 
 # 3. Apply Traffic Control rules
 if [ "${downMbit}" -le 0 ] && [ "${upMbit}" -le 0 ]; then
   # Unlimited mode: Clear qdiscs
-  tc qdisc del dev br-lan root 2>/dev/null || true
+  tc qdisc del dev '${lanInterface}' root 2>/dev/null || true
   [ -n "$WAN_IF" ] && tc qdisc del dev "$WAN_IF" root 2>/dev/null || true
   echo "QOS_CLEARED"
 else
   # Download Limiting (Egress on br-lan to clients)
   if [ "${downMbit}" -gt 0 ]; then
-    tc qdisc del dev br-lan root 2>/dev/null || true
-    tc qdisc add dev br-lan root cake bandwidth ${downMbit}mbit 2>/dev/null || \
-    tc qdisc add dev br-lan root handle 1: tbf rate ${downMbit}mbit burst 64kb latency 50ms 2>/dev/null || \
-    tc qdisc add dev br-lan root handle 1: fq_codel 2>/dev/null || true
+    tc qdisc del dev '${lanInterface}' root 2>/dev/null || true
+    tc qdisc add dev '${lanInterface}' root cake bandwidth ${downMbit}mbit 2>/dev/null || \
+    tc qdisc add dev '${lanInterface}' root handle 1: tbf rate ${downMbit}mbit burst 64kb latency 50ms 2>/dev/null || \
+    tc qdisc add dev '${lanInterface}' root handle 1: fq_codel 2>/dev/null || true
   fi
 
   # Upload Limiting (Egress on WAN interface to internet)
@@ -1497,10 +1520,17 @@ fi
       };
     }
 
+    const isLocalGateway = this.config.mode === 'local' || this.config.mode === 'local_linux';
+    const lanInterface = (this.config.lanInterface || (isLocalGateway ? 'eth1' : 'br-lan')).replace(/[^a-zA-Z0-9_.:-]/g, '');
+    const wanInterface = (this.config.wanInterface || '').replace(/[^a-zA-Z0-9_.:-]/g, '');
+    const wanDiscovery = wanInterface
+      ? `WAN_IF='${wanInterface}'`
+      : `WAN_IF=$(uci -q get network.wan.device || uci -q get network.wan.ifname || ip route show default 2>/dev/null | awk '{print $5}' || echo "wan")`;
+
     const command = `
-WAN_IF=$(uci -q get network.wan.device || uci -q get network.wan.ifname || ip route show default 2>/dev/null | awk '{print $5}' || echo "wan")
+${wanDiscovery}
 echo "=== LAN_QDISC ==="
-tc -s qdisc show dev br-lan 2>/dev/null || true
+tc -s qdisc show dev '${lanInterface}' 2>/dev/null || true
 echo "=== WAN_QDISC ==="
 [ -n "$WAN_IF" ] && tc -s qdisc show dev "$WAN_IF" 2>/dev/null || true
 echo "=== WAN_IF ==="
@@ -1522,7 +1552,7 @@ echo "$WAN_IF"
       active: hasLanQos,
       downloadMbps: downMbps,
       uploadMbps: 0,
-      lanInterface: 'br-lan',
+      lanInterface,
       wanInterface: wanIf,
       details: output.replace(/=== [A-Z_]+ ===/g, '').trim(),
     };

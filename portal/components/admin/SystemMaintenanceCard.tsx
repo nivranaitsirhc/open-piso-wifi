@@ -5,7 +5,12 @@ import { Power, RotateCcw, Trash2, RefreshCw, CheckCircle2, AlertCircle, ShieldA
 import { Card, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 
-export function SystemMaintenanceCard() {
+interface SystemMaintenanceCardProps {
+  gatewayType?: 'openwrt_ssh' | 'local_linux' | 'simulation';
+}
+
+export function SystemMaintenanceCard({ gatewayType }: SystemMaintenanceCardProps) {
+  const isOpenWrtGateway = gatewayType === 'openwrt_ssh' || gatewayType === 'simulation';
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
   const [statusMsg, setStatusMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
@@ -96,7 +101,7 @@ export function SystemMaintenanceCard() {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {/* Deploy / Update OpenWrt Router */}
-        <div className="p-4 rounded-xl bg-[#f8f6ee] dark:bg-[#111713] border-2 border-black dark:border-[#4a6052] flex flex-col justify-between shadow-neo-sm">
+        {isOpenWrtGateway && <div className="p-4 rounded-xl bg-[#f8f6ee] dark:bg-[#111713] border-2 border-black dark:border-[#4a6052] flex flex-col justify-between shadow-neo-sm">
           <div>
             <h3 className="text-xs font-black uppercase text-black dark:text-white flex items-center gap-1.5 mb-1 font-display">
               <RefreshCw className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
@@ -115,7 +120,7 @@ export function SystemMaintenanceCard() {
           >
             Deploy Router Config
           </Button>
-        </div>
+        </div>}
 
         {/* Restart Services */}
         <div className="p-4 rounded-xl bg-[#f8f6ee] dark:bg-[#111713] border-2 border-black dark:border-[#4a6052] flex flex-col justify-between shadow-neo-sm">
@@ -147,7 +152,9 @@ export function SystemMaintenanceCard() {
               Flush Active Sessions
             </h3>
             <p className="text-[11px] font-semibold text-neutral-600 dark:text-[#b7c6c2] mb-3.5">
-              Clears all authorized MAC addresses from OpenWrt firewall and marks sessions expired.
+              {isOpenWrtGateway
+                ? 'Clears all authorized MAC addresses from the OpenWrt firewall and marks sessions expired.'
+                : 'Clears all authorized clients from the local nftables firewall and marks sessions expired.'}
             </p>
           </div>
           <Button
@@ -162,7 +169,7 @@ export function SystemMaintenanceCard() {
         </div>
 
         {/* Reboot OpenWrt Router */}
-        <div className="p-4 rounded-xl bg-[#f8f6ee] dark:bg-[#111713] border-2 border-black dark:border-[#4a6052] flex flex-col justify-between shadow-neo-sm">
+        {isOpenWrtGateway && <div className="p-4 rounded-xl bg-[#f8f6ee] dark:bg-[#111713] border-2 border-black dark:border-[#4a6052] flex flex-col justify-between shadow-neo-sm">
           <div>
             <h3 className="text-xs font-black uppercase text-black dark:text-white flex items-center gap-1.5 mb-1 font-display">
               <RotateCcw className="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400" />
@@ -181,7 +188,7 @@ export function SystemMaintenanceCard() {
           >
             Reboot Router
           </Button>
-        </div>
+        </div>}
 
         {/* Reboot Raspberry Pi */}
         <div className="p-4 rounded-xl bg-[#f8f6ee] dark:bg-[#111713] border-2 border-black dark:border-[#4a6052] flex flex-col justify-between sm:col-span-2 shadow-neo-sm">

@@ -1,5 +1,26 @@
 const DAEMON_URL = process.env.DAEMON_URL || 'http://127.0.0.1:4000';
 
+export interface GatewayCapabilities {
+  kickStation: boolean;
+  wifiConfig: boolean;
+  rssi: boolean;
+  qos: boolean;
+  gatewayType: 'openwrt_ssh' | 'local_linux' | 'simulation';
+}
+
+export async function getGatewayCapabilities(): Promise<GatewayCapabilities> {
+  const res = await fetch(`${DAEMON_URL}/api/gateway/capabilities`, {
+    cache: 'no-store',
+    signal: AbortSignal.timeout(1500),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Daemon returned status ${res.status}`);
+  }
+
+  return res.json() as Promise<GatewayCapabilities>;
+}
+
 export interface CoinResponse {
   pulses: number;
 }

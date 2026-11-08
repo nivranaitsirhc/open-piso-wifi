@@ -66,6 +66,7 @@ interface AdminSidebarProps {
   onCloseMobile: () => void;
   activeSessionsCount?: number;
   totalVouchersCount?: number;
+  gatewayType?: 'openwrt_ssh' | 'local_linux' | 'simulation';
   onLogout: () => void;
 }
 
@@ -78,6 +79,7 @@ export function AdminSidebar({
   onCloseMobile,
   activeSessionsCount = 0,
   totalVouchersCount = 0,
+  gatewayType,
   onLogout,
 }: AdminSidebarProps) {
   const navGroups: NavGroup[] = [
@@ -135,11 +137,11 @@ export function AdminSidebar({
           label: 'Machine Settings',
           icon: Wrench,
         },
-        {
+        ...((gatewayType === 'openwrt_ssh' || gatewayType === 'simulation') ? [{
           id: 'router' as AdminTab,
           label: 'Router & Wi-Fi',
           icon: Radio,
-        },
+        }] : []),
         {
           id: 'devices' as AdminTab,
           label: 'VIP & Blacklist',
@@ -206,7 +208,7 @@ export function AdminSidebar({
                 OPEN PISO WIFI
               </div>
               <div className="text-[10px] font-bold text-neutral-600 dark:text-[#b7c6c2] truncate">
-                OpenWrt Controller
+                {gatewayType === 'local_linux' ? 'Local Linux Gateway' : 'OpenWrt Controller'}
               </div>
             </div>
           </div>

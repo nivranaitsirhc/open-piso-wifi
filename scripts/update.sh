@@ -89,6 +89,11 @@ if [ -z "$GITHUB_REPO" ] && [ -f "$PORTAL_DIR/.env" ]; then
 fi
 GITHUB_REPO="${GITHUB_REPO:-nivranaitsirhc/open-piso-wifi}"
 
+ROUTER_MODE="${ROUTER_MODE:-}"
+if [ -z "$ROUTER_MODE" ] && [ -f "$DAEMON_DIR/.env" ]; then
+    ROUTER_MODE=$(grep -E '^ROUTER_MODE=' "$DAEMON_DIR/.env" | head -n1 | cut -d'=' -f2- | tr -d '\"'\'' ' || echo "")
+fi
+
 GITHUB_TOKEN="${CLI_TOKEN:-${GITHUB_TOKEN:-}}"
 if [ -z "$GITHUB_TOKEN" ] && [ -f "$PORTAL_DIR/.env" ]; then
     GITHUB_TOKEN=$(grep -E '^GITHUB_TOKEN=' "$PORTAL_DIR/.env" | head -n1 | cut -d'=' -f2- | tr -d '\"'\'' ' || echo "")
@@ -480,6 +485,10 @@ echo -e "${GREEN}✓ Database verified and restored with zero data loss.${NC}"
 # STEP 5: SMART ROUTER UPDATE (Preserving MAC tables and Wi-Fi state)
 # ------------------------------------------------------------------------------
 echo ""
+if [ "$ROUTER_MODE" = "local" ] || [ "$ROUTER_MODE" = "local_linux" ]; then
+    echo -e "${PURPLE}[5/6] Skipping OpenWrt Router update (local Linux gateway mode)...${NC}"
+    echo -e "${GREEN}✓ Local nftables/dnsmasq gateway configuration preserved.${NC}"
+else
 echo -e "${PURPLE}[5/6] Updating OpenWrt Router configuration (Preserving State)...${NC}"
 
 ROUTER_IP="${ROUTER_IP:-192.168.1.1}"
@@ -533,6 +542,7 @@ if [ -f "$SETUP_SCRIPT" ] && ping -c 1 -W 2 "$ROUTER_IP" >/dev/null 2>&1; then
     fi
 else
     echo -e "${YELLOW}Notice: OpenWrt Router at ${ROUTER_IP} is offline or unreachable. Skipping router update.${NC}"
+fi
 fi
 
 # ------------------------------------------------------------------------------

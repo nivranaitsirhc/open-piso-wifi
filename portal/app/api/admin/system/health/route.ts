@@ -3,7 +3,7 @@ import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
 import fs from 'node:fs';
 import os from 'node:os';
-import { getRouterTelemetry } from '@/lib/daemon';
+import { getGatewayCapabilities, getRouterTelemetry } from '@/lib/daemon';
 
 const execAsync = promisify(exec);
 export const dynamic = 'force-dynamic';
@@ -51,7 +51,8 @@ export async function GET() {
   const loadAvg = os.loadavg().map((n) => Math.round(n * 100) / 100).join(', ');
   const rpiUptimeSeconds = Math.floor(os.uptime());
 
-  // 5. OpenWrt Router Telemetry
+  // 5. Gateway telemetry. Local Linux gateway mode does not have an
+  // OpenWrt/SSH router to query, so avoid running OpenWrt-specific probes.
   let routerStats = {
     uptimeSeconds: 0,
     loadAvg: '0.00, 0.00, 0.00',
@@ -63,8 +64,13 @@ export async function GET() {
     dhcpLeasesCount: 0,
   };
 
+  let gatewayType: 'openwrt_ssh' | 'local_linux' | 'simulation' | 'unknown' = 'unknown';
   try {
-    routerStats = await getRouterTelemetry();
+    const capabilities = await getGatewayCapabilities();
+    gatewayType = capabilities.gatewayType;
+    if (gatewayType !== 'local_linux') {
+      routerStats = await getRouterTelemetry();
+    }
   } catch {}
 
   return NextResponse.json({
@@ -81,5 +87,6 @@ export async function GET() {
       platform: `${os.type()} ${os.arch()}`,
     },
     router: routerStats,
+    gatewayType,
   });
 }
