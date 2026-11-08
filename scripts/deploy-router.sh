@@ -86,7 +86,7 @@ for arg in "$@"; do
 done
 
 if [ -z "$PORTAL_IP" ]; then
-    echo -e "${RED}Error: Raspberry Pi Portal IP is required and could not be detected.${NC}"
+    echo -e "${RED}Error: Linux SBC Portal IP is required and could not be detected.${NC}"
     echo -e "${RED}Please pass --portal-ip=<valid_ipv4> (e.g. --portal-ip=192.168.1.50)${NC}"
     exit 1
 fi
@@ -115,7 +115,7 @@ fi
 # 1. TEST INITIAL CONNECTIVITY
 echo -e "${PURPLE}[1/4] Checking network connection to ${ROUTER_IP}...${NC}"
 if ! ping -c 1 -W 2 "$ROUTER_IP" >/dev/null 2>&1; then
-    echo -e "${RED}❌ Cannot reach ${ROUTER_IP}. Please check Ethernet connection from RPi to Router LAN port.${NC}"
+    echo -e "${RED}❌ Cannot reach ${ROUTER_IP}. Please check Ethernet connection from SBC to Router LAN port.${NC}"
     exit 1
 fi
 echo -e "${GREEN}✓ Router is reachable at ${ROUTER_IP}.${NC}"
@@ -140,7 +140,7 @@ ssh -o StrictHostKeyChecking=no $SSH_KEY_ARG "${ROUTER_USER}@${ROUTER_IP}" "chmo
 
 # 5. DEPLOY SSH PUBLIC KEYS TO ROUTER (If not already present)
 echo ""
-echo -e "${PURPLE}[4/4] Ensuring Raspberry Pi SSH keys are authorized on OpenWrt...${NC}"
+echo -e "${PURPLE}[4/4] Ensuring Linux SBC SSH keys are authorized on OpenWrt...${NC}"
 
 if sudo test -f /root/.ssh/id_rsa.pub; then
     ROOT_PUB=$(sudo cat /root/.ssh/id_rsa.pub 2>/dev/null || true)

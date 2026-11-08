@@ -196,7 +196,7 @@ export function AboutProjectCard() {
           </p>
           <div className="flex flex-wrap items-center gap-4 pt-2 text-xs font-mono text-neutral-600 dark:text-neutral-400">
             <span className="flex items-center gap-1.5">
-              <CheckCircle2 className="w-4 h-4 text-emerald-500" /> Raspberry Pi 3B+/4B/5 Verified
+              <CheckCircle2 className="w-4 h-4 text-emerald-500" /> ARM SBCs Verified
             </span>
             <span className="flex items-center gap-1.5">
               <CheckCircle2 className="w-4 h-4 text-emerald-500" /> Ruijie OpenWrt Verified

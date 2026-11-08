@@ -46,7 +46,7 @@ Official OpenWrt firmware package for the **Ruijie Reyee RG-EW1200G Pro (v1.1)**
 
 You can download and verify the images automatically using the scripts included in this folder:
 
-### On Linux / Raspberry Pi / macOS:
+### On Linux / Linux SBC / macOS:
 ```bash
 # Download and verify both images to ./bin/
 bash firmware/ruijie-rg-ew1200g-pro/download-firmware.sh
@@ -104,8 +104,8 @@ powershell -ExecutionPolicy Bypass -File firmware\ruijie-rg-ew1200g-pro\download
 ## 🔗 Next Step: OpenPisoWiFi Auto-Configuration
 
 Once OpenWrt 25.12.5 is running on your Ruijie router:
-1. Connect Raspberry Pi **eth0** to **LAN Port 1** on the Ruijie router.
-2. Run the deployment script from the Raspberry Pi:
+1. Connect Linux SBC **eth0** to **LAN Port 1** on the Ruijie router.
+2. Run the deployment script from the Linux SBC:
    ```bash
    bash scripts/deploy-router.sh
    ```

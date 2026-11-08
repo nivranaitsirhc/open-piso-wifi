@@ -9,7 +9,7 @@ const execAsync = promisify(exec);
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
-  // 1. Raspberry Pi CPU Temperature
+  // 1. Linux SBC CPU Temperature
   let cpuTempC = 42.5; // Default/mock temp
   try {
     if (fs.existsSync('/sys/class/thermal/thermal_zone0/temp')) {
@@ -24,7 +24,7 @@ export async function GET() {
     }
   } catch {}
 
-  // 2. Raspberry Pi Memory Usage
+  // 2. Linux SBC Memory Usage
   const totalMem = os.totalmem();
   const freeMem = os.freemem();
   const usedMem = totalMem - freeMem;
@@ -74,7 +74,7 @@ export async function GET() {
   } catch {}
 
   return NextResponse.json({
-    rpi: {
+    SBC: {
       cpuTempC,
       memTotalMb: Math.round(totalMem / (1024 * 1024)),
       memUsedMb: Math.round(usedMem / (1024 * 1024)),

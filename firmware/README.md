@@ -22,7 +22,7 @@ This directory contains the firmware packages, binaries, and source code powerin
 
 ### Quick Download & Checksum Verification:
 ```bash
-# On Linux / Raspberry Pi:
+# On Linux / Linux SBC:
 bash firmware/ruijie-rg-ew1200g-pro/download-firmware.sh
 
 # On Windows PowerShell:
@@ -41,10 +41,10 @@ This module enables a low-cost **ESP32** to act as a dedicated real-time hardwar
 
 | Challenge with Direct Linux GPIO | Solution with ESP32 Hardware Bridge |
 | :--- | :--- |
-| **Linux Kernel Jitter & Missed Pulses**: High CPU load on Raspberry Pi can occasionally drop fast coin pulses (e.g. ₱20 coins emitting 20 pulses in 800ms). | **Microsecond Hardware Timer Interrupts**: Dedicated microsecond interrupts guarantee 100% pulse count accuracy regardless of SBC OS load. |
-| **Physical Proximity**: Raspberry Pi may be housed elsewhere in the kiosk cabinet. | **USB-Serial or Wi-Fi**: Plug ESP32 into any USB port of the Raspberry Pi or OpenWrt router. |
+| **Linux Kernel Jitter & Missed Pulses**: High CPU load on Linux SBC can occasionally drop fast coin pulses (e.g. ₱20 coins emitting 20 pulses in 800ms). | **Microsecond Hardware Timer Interrupts**: Dedicated microsecond interrupts guarantee 100% pulse count accuracy regardless of SBC OS load. |
+| **Physical Proximity**: Linux SBC may be housed elsewhere in the kiosk cabinet. | **USB-Serial or Wi-Fi**: Plug ESP32 into any USB port of the Linux SBC or OpenWrt router. |
 | **I2C OLED Screen Drivers**: Direct Linux kernel I2C setup can conflict with pinouts or OS updates. | **Hardware I2C**: ESP32 drives the 0.96" / 1.3" SSD1306 OLED directly with smooth animations. |
-| **Cost Reduction**: A Raspberry Pi can be replaced with an ultra-affordable x86 thin client, Orange Pi, or direct OpenWrt router USB port. | **$3 Microcontroller**: Low barrier to entry for budget kiosks. |
+| **Cost Reduction**: A Linux SBC can be replaced with an ultra-affordable x86 thin client, Orange Pi, or direct OpenWrt router USB port. | **$3 Microcontroller**: Low barrier to entry for budget kiosks. |
 
 ### 🔌 Hardware Wiring Diagram
 
@@ -68,7 +68,7 @@ This module enables a low-cost **ESP32** to act as a dedicated real-time hardwar
 
 The ESP32 communicates over USB Serial using standard newline-delimited JSON.
 
-#### From ESP32 ➔ Host (Raspberry Pi / Router):
+#### From ESP32 ➔ Host (Linux SBC / Router):
 ```json
 {"event": "pulse", "count": 1, "raw": 1}
 {"event": "coin_settled", "amount": 5, "pulses": 5}

@@ -392,7 +392,7 @@ export default function LandingPage() {
               <div className="flex items-center justify-between text-[11px] sm:text-xs text-neutral-300 font-mono">
                 <span className="flex items-center gap-1.5 truncate">
                   <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
-                  <span className="truncate">⚡ 1-Line Installer (Raspberry Pi &amp; Linux)</span>
+                  <span className="truncate">⚡ 1-Line Installer (Linux SBC &amp; Linux)</span>
                 </span>
                 <span className="text-emerald-400 font-bold shrink-0 ml-2">curl | bash</span>
               </div>
@@ -615,10 +615,10 @@ export default function LandingPage() {
                 <div>
                   <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                     <span className="px-2.5 py-1 bg-black text-[#ffe17c] font-black text-xs uppercase rounded">Build 1</span>
-                    <h3 className="text-xl sm:text-3xl font-black">Decoupled OpenWrt Gigabit + Raspberry Pi Paywall</h3>
+                    <h3 className="text-xl sm:text-3xl font-black">Decoupled OpenWrt Gigabit + Linux SBC Paywall</h3>
                   </div>
                   <p className="text-neutral-700 text-xs sm:text-sm mt-1">
-                    Industrial standard: Any gigabit OpenWrt router (tested and verified on Ruijie RG-EW1200G Pro) paired with a Raspberry Pi 3/4/5.
+                    Industrial standard: Any gigabit OpenWrt router (tested and verified on Ruijie RG-EW1200G Pro) paired with a ARM SBCs.
                   </p>
                 </div>
                 <span className="px-3.5 py-1.5 bg-emerald-300 neo-border rounded-xl text-xs font-black uppercase neo-shadow-xs shrink-0">
@@ -640,7 +640,7 @@ export default function LandingPage() {
                       ├── 🛡️ Kernel nftables: table inet piso_portal (atomic timeouts)
                     </div>
                     <div className="flex items-center gap-2 text-neutral-800 pl-4 sm:pl-6 border-l-2 border-neutral-300 whitespace-nowrap">
-                      └── 🍓 LAN 1 ──Ethernet──&gt; <span className="font-bold">Raspberry Pi (192.168.1.240)</span>
+                      └── 🍓 LAN 1 ──Ethernet──&gt; <span className="font-bold">Linux SBC (192.168.1.240)</span>
                     </div>
                     <div className="text-[10px] sm:text-[11px] text-neutral-500 pt-1">
                       Port 80 traffic automatically redirected to Pi :3000 captive paywall.
@@ -663,7 +663,7 @@ export default function LandingPage() {
                   <div className="text-[#ffe17c] font-bold border-b border-neutral-800 pb-2">
                     ⚡ 1-Click Router Configuration Script:
                   </div>
-                  <pre className="text-neutral-300 overflow-x-auto p-2 bg-neutral-900 rounded-lg text-[11px] sm:text-xs"><code># From Raspberry Pi terminal:
+                  <pre className="text-neutral-300 overflow-x-auto p-2 bg-neutral-900 rounded-lg text-[11px] sm:text-xs"><code># From Linux SBC terminal:
 bash scripts/deploy-router.sh \
 --router-ip 192.168.1.1 \
 --portal-ip 192.168.1.240</code></pre>
@@ -685,7 +685,7 @@ bash scripts/deploy-router.sh \
                     <h3 className="text-xl sm:text-3xl font-black">Universal Standalone Pi Gateway (No OpenWrt Needed)</h3>
                   </div>
                   <p className="text-neutral-700 text-xs sm:text-sm mt-1">
-                    All-in-one setup: Raspberry Pi performs NAT routing, DHCP leasing, nftables firewall, and captive paywall.
+                    All-in-one setup: Linux SBC performs NAT routing, DHCP leasing, nftables firewall, and captive paywall.
                   </p>
                 </div>
                 <span className="px-3.5 py-1.5 bg-blue-300 neo-border rounded-xl text-xs font-black uppercase neo-shadow-xs shrink-0">
@@ -701,7 +701,7 @@ bash scripts/deploy-router.sh \
                       <span className="text-blue-600 font-bold">[ISP Modem]</span> ──Ethernet──&gt; <span className="font-bold">eth0 (Pi WAN / DHCP)</span>
                     </div>
                     <div className="flex items-center gap-2 text-neutral-800 pl-4 sm:pl-6 border-l-2 border-neutral-300 whitespace-nowrap">
-                      ├── 🍓 Raspberry Pi 4 / 5 (Kernel NAT + nftables + Paywall)
+                      ├── 🍓 Linux SBC 4 / 5 (Kernel NAT + nftables + Paywall)
                     </div>
                     <div className="flex items-center gap-2 text-neutral-800 pl-4 sm:pl-6 border-l-2 border-neutral-300 whitespace-nowrap">
                       └── 🔌 USB3-to-Gigabit LAN (eth1) ──&gt; <span className="font-bold">Any AP (TP-Link, Tenda, Mercusys)</span>
@@ -1146,7 +1146,7 @@ const char* SHARED_SECRET = &quot;change-me-to-a-secure-secret&quot;;</code></pr
                   </div>
                   <h3 className="text-xl font-black">Clone &amp; Install</h3>
                   <p className="text-xs font-bold text-neutral-600 leading-relaxed">
-                    Clone the repo to your Raspberry Pi or Debian/Ubuntu machine and execute the 1-click automated setup script.
+                    Clone the repo to your Linux SBC or Debian/Ubuntu machine and execute the 1-click automated setup script.
                   </p>
                 </div>
                 <div className="p-2.5 bg-neutral-900 rounded-xl font-mono text-[11px] text-amber-300 overflow-x-auto">
@@ -1218,7 +1218,7 @@ const char* SHARED_SECRET = &quot;change-me-to-a-secure-secret&quot;;</code></pr
                   </div>
                   <h3 className="text-xl font-black">Clone &amp; Install</h3>
                   <p className="text-xs font-bold text-neutral-600 leading-relaxed">
-                    Clone the repo to your Raspberry Pi 4 or 5 and execute the 1-click automated setup script.
+                    Clone the repo to your Linux SBC 4 or 5 and execute the 1-click automated setup script.
                   </p>
                 </div>
                 <div className="p-2.5 bg-neutral-900 rounded-xl font-mono text-[11px] text-amber-300 overflow-x-auto">
@@ -1290,7 +1290,7 @@ const char* SHARED_SECRET = &quot;change-me-to-a-secure-secret&quot;;</code></pr
                   </div>
                   <h3 className="text-xl font-black">Setup Central Daemon</h3>
                   <p className="text-xs font-bold text-neutral-600 leading-relaxed">
-                    Install Open Piso WiFi server daemon on your local Raspberry Pi, mini PC, or server on the local network.
+                    Install Open Piso WiFi server daemon on your local Linux SBC, mini PC, or server on the local network.
                   </p>
                 </div>
                 <div className="p-2.5 bg-neutral-900 rounded-xl font-mono text-[11px] text-amber-300 overflow-x-auto">
@@ -1622,7 +1622,7 @@ const char* SHARED_SECRET = &quot;change-me-to-a-secure-secret&quot;;</code></pr
                 <span className="text-emerald-400 font-bold">
                   {activeBuild === 3
                     ? 'Connect Coin Signal to ESP32 Pin 18 (ISR) & Inhibit to Pin 19'
-                    : 'Connect Coin Signal to Raspberry Pi Pin 3 (GPIO 2) & Inhibit to Pin 5 (GPIO 3)'}
+                    : 'Connect Coin Signal to Linux SBC Pin 3 (GPIO 2) & Inhibit to Pin 5 (GPIO 3)'}
                 </span>
               </div>
               <div className="text-right text-[11px] font-mono text-amber-400 sm:hidden">
@@ -1663,7 +1663,7 @@ const char* SHARED_SECRET = &quot;change-me-to-a-secure-secret&quot;;</code></pr
                                │                │          │                  │        │
                                ▼ (Direct)       ▼ (Pulse)  ▼ (5V Power)       ▼ (GND)  │
 ┌──────────────────────────────────────────────────────────────────────────────────────┴─┐
-│  🍓 RASPBERRY PI 3B+/4B/5  OR  🎛️ ESP32 DEVKIT CONTROLLER                               │
+│  🍓 ARM SBCs  OR  🎛️ ESP32 DEVKIT CONTROLLER                               │
 │                                                                                        │
 │   • Power IN: 5V (Direct from Buck Converter OUT+)  +  GND (Pin 6 Common Ground)       │
 │   • GPIO 2 (Physical Pin 3)  OR  ESP32 GPIO 18  ◄── VIA 10kΩ RESISTOR (Coin Pulse)     │
@@ -1778,14 +1778,14 @@ const char* SHARED_SECRET = &quot;change-me-to-a-secure-secret&quot;;</code></pr
                 <div>
                   <h3 className="text-2xl font-black">Alternative Single-Board Computers</h3>
                   <p className="text-xs font-bold text-neutral-600 mt-1 leading-relaxed">
-                    While Raspberry Pi 3B+/4B/5 is our primary target, our lightweight Linux daemon and Next.js portal can run on virtually any ARM or x86 board.
+                    While ARM SBCs is our primary target, our lightweight Linux daemon and Next.js portal can run on virtually any ARM or x86 board.
                   </p>
                 </div>
 
                 <div className="space-y-2.5 pt-2 font-mono text-xs">
                   <div className="p-2.5 bg-emerald-50 border border-emerald-300 rounded-xl">
                     <span className="font-bold text-emerald-700">✓ Verified &amp; Tested:</span>
-                    <p className="text-[11px] text-neutral-800 mt-0.5">Raspberry Pi 3B+, 4B, 5 (Debian 12 Bookworm, DietPi, Ubuntu Server)</p>
+                    <p className="text-[11px] text-neutral-800 mt-0.5">Linux SBC 3B+, 4B, 5 (Debian 12 Bookworm, DietPi, Ubuntu Server)</p>
                   </div>
                   <div className="p-2.5 bg-amber-50 border border-amber-300 rounded-xl">
                     <span className="font-bold text-amber-800">🧪 Actively Seeking Testers:</span>
@@ -1987,14 +1987,14 @@ const char* SHARED_SECRET = &quot;change-me-to-a-secure-secret&quot;;</code></pr
               Ready In Under 3 Minutes
             </h2>
             <p className="text-neutral-400 font-mono text-xs sm:text-sm">
-              Run this single command on a clean Raspberry Pi OS or Ubuntu/Debian Linux installation:
+              Run this single command on a clean Armbian/Debian/Ubuntu or Ubuntu/Debian Linux installation:
             </p>
           </div>
 
           <div className="bg-neutral-900 border-2 border-neutral-700 rounded-2xl p-5 sm:p-8 space-y-4 neo-shadow-lg">
             <div className="flex items-center justify-between font-mono text-xs text-neutral-400 border-b border-neutral-800 pb-3">
               <span>bash terminal</span>
-              <span className="text-emerald-400">root@raspberrypi:~#</span>
+              <span className="text-emerald-400">root@LinuxSBC:~#</span>
             </div>
             <pre className="font-mono text-xs sm:text-sm text-amber-300 overflow-x-auto p-4 bg-black rounded-xl border border-neutral-800">
               <code>curl -fsSL https://openpisowifi.nicolei.games/install.sh | sudo bash</code>
@@ -2050,7 +2050,7 @@ const char* SHARED_SECRET = &quot;change-me-to-a-secure-secret&quot;;</code></pr
                 <span className="transition group-open:rotate-180">▼</span>
               </summary>
               <p className="mt-3 text-sm text-neutral-700 font-medium leading-relaxed">
-                Yes! With <strong>Build 2 (Universal Standalone Pi Gateway)</strong>, the Raspberry Pi performs the routing, NAT, and captive paywall itself. You can connect any standard off-the-shelf home router (TP-Link, Tenda, Mercusys) in standard Access Point mode using a USB-to-LAN gigabit adapter.
+                Yes! With <strong>Build 2 (Universal Standalone Pi Gateway)</strong>, the Linux SBC performs the routing, NAT, and captive paywall itself. You can connect any standard off-the-shelf home router (TP-Link, Tenda, Mercusys) in standard Access Point mode using a USB-to-LAN gigabit adapter.
               </p>
             </details>
 

@@ -21,14 +21,14 @@ export function SystemHealthCard({ gatewayType }: SystemHealthCardProps) {
 
   const { data: versionData } = useSWR('/api/admin/system/version', fetcher);
 
-  const rpi = data?.rpi;
+  const SBC = data?.SBC;
   const router = data?.router;
   const showOpenWrtTelemetry = gatewayType === 'openwrt_ssh' || gatewayType === 'simulation';
 
   const tempColor =
-    (rpi?.cpuTempC || 0) < 55
+    (SBC?.cpuTempC || 0) < 55
       ? 'text-emerald-400 bg-emerald-500/15 border-emerald-500/30'
-      : (rpi?.cpuTempC || 0) < 70
+      : (SBC?.cpuTempC || 0) < 70
       ? 'text-amber-400 bg-amber-500/15 border-amber-500/30'
       : 'text-rose-400 bg-rose-500/15 border-rose-500/30';
 
@@ -52,7 +52,7 @@ export function SystemHealthCard({ gatewayType }: SystemHealthCardProps) {
           <div>
             <CardTitle>Hardware Health & Telemetry</CardTitle>
             <p className="text-xs text-neutral-600 dark:text-[#b7c6c2] font-semibold">
-              {showOpenWrtTelemetry ? 'Real-time status of Raspberry Pi & OpenWrt router' : 'Real-time status of the local Linux gateway'}
+              {showOpenWrtTelemetry ? 'Real-time status of Linux SBC & OpenWrt router' : 'Real-time status of the local Linux gateway'}
             </p>
           </div>
         </div>
@@ -70,12 +70,12 @@ export function SystemHealthCard({ gatewayType }: SystemHealthCardProps) {
       </CardHeader>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Raspberry Pi Host Telemetry */}
+        {/* Linux SBC Host Telemetry */}
         <div className="p-4 rounded-xl bg-[#f8f6ee] dark:bg-[#111713] border-2 border-black dark:border-[#4a6052] space-y-3.5 shadow-neo-sm">
           <div className="flex items-center justify-between border-b-2 border-black/10 dark:border-white/10 pb-2">
             <div>
               <span className="text-xs font-black uppercase text-black dark:text-white flex items-center gap-1.5 font-display">
-                🍓 Raspberry Pi Paywall
+                🍓 Linux SBC Paywall
               </span>
               <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                 <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-lg bg-white dark:bg-[#1c241f] border border-black dark:border-[#4a6052] text-black dark:text-white flex items-center gap-1 shadow-neo-sm">
@@ -99,7 +99,7 @@ export function SystemHealthCard({ gatewayType }: SystemHealthCardProps) {
                 <span className="font-extrabold text-neutral-700 dark:text-[#b7c6c2]">CPU Temp</span>
               </div>
               <span className={`px-2 py-0.5 rounded-lg border-2 border-black font-mono font-black text-xs shadow-neo-sm ${tempColor}`}>
-                {rpi?.cpuTempC || 0}°C
+                {SBC?.cpuTempC || 0}°C
               </span>
             </div>
 
@@ -110,7 +110,7 @@ export function SystemHealthCard({ gatewayType }: SystemHealthCardProps) {
                 <span className="font-extrabold text-neutral-700 dark:text-[#b7c6c2]">Uptime</span>
               </div>
               <span className="font-mono font-black text-black dark:text-[#ffe17c] text-xs">
-                {formatUptime(rpi?.uptimeSeconds || 0)}
+                {formatUptime(SBC?.uptimeSeconds || 0)}
               </span>
             </div>
           </div>
@@ -120,14 +120,14 @@ export function SystemHealthCard({ gatewayType }: SystemHealthCardProps) {
             <div className="flex justify-between text-xs font-bold">
               <span className="text-neutral-700 dark:text-[#b7c6c2] flex items-center gap-1.5">
                 <Cpu className="w-3.5 h-3.5 text-black dark:text-[#ffe17c]" />
-                RAM Usage ({rpi?.memUsedMb || 0}MB / {rpi?.memTotalMb || 0}MB)
+                RAM Usage ({SBC?.memUsedMb || 0}MB / {SBC?.memTotalMb || 0}MB)
               </span>
-              <span className="font-mono font-black text-black dark:text-white">{rpi?.memUsagePercent || 0}%</span>
+              <span className="font-mono font-black text-black dark:text-white">{SBC?.memUsagePercent || 0}%</span>
             </div>
             <div className="w-full h-3 bg-white dark:bg-[#1c241f] rounded-full overflow-hidden border-2 border-black dark:border-[#4a6052] shadow-neo-sm">
               <div
                 className="h-full bg-[#ffe17c] rounded-full border-r-2 border-black transition-all"
-                style={{ width: `${rpi?.memUsagePercent || 0}%` }}
+                style={{ width: `${SBC?.memUsagePercent || 0}%` }}
               />
             </div>
           </div>
@@ -137,14 +137,14 @@ export function SystemHealthCard({ gatewayType }: SystemHealthCardProps) {
             <div className="flex justify-between text-xs font-bold">
               <span className="text-neutral-700 dark:text-[#b7c6c2] flex items-center gap-1.5">
                 <HardDrive className="w-3.5 h-3.5 text-black dark:text-[#ffe17c]" />
-                SD Storage ({rpi?.diskUsedGb || 0}GB / {rpi?.diskTotalGb || 0}GB)
+                SD Storage ({SBC?.diskUsedGb || 0}GB / {SBC?.diskTotalGb || 0}GB)
               </span>
-              <span className="font-mono font-black text-black dark:text-white">{rpi?.diskPercent || 0}%</span>
+              <span className="font-mono font-black text-black dark:text-white">{SBC?.diskPercent || 0}%</span>
             </div>
             <div className="w-full h-3 bg-white dark:bg-[#1c241f] rounded-full overflow-hidden border-2 border-black dark:border-[#4a6052] shadow-neo-sm">
               <div
                 className="h-full bg-[#b7c6c2] rounded-full border-r-2 border-black transition-all"
-                style={{ width: `${rpi?.diskPercent || 0}%` }}
+                style={{ width: `${SBC?.diskPercent || 0}%` }}
               />
             </div>
           </div>

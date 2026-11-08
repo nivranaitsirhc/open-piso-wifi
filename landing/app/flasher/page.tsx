@@ -435,14 +435,14 @@ export default function Esp32FlasherPage() {
               </div>
             </div>
 
-            {/* Why No Raspberry Pi is needed */}
+            {/* Why No Linux SBC is needed */}
             <div className="p-4 rounded-xl border border-neutral-300 bg-neutral-50 space-y-2">
               <h4 className="font-bold text-xs flex items-center gap-1.5 text-neutral-900">
                 <Info className="w-4 h-4 text-amber-600 shrink-0" />
-                <span>Why ESP32 + OpenWrt instead of Raspberry Pi?</span>
+                <span>Why ESP32 + OpenWrt instead of Linux SBC?</span>
               </h4>
               <p className="text-xs text-neutral-600 leading-relaxed">
-                A Raspberry Pi already features its own 40-pin GPIO header. In OpenPisoWiFi, the ESP32 is designed specifically to pair with <strong>OpenWrt Gigabit Routers</strong> (tested and verified on the <strong>Ruijie RG-EW1200G Pro</strong>, or other OpenWrt-supported models) so you can build a complete commercial vending machine with high-power AC1200 Wi-Fi without buying an expensive Raspberry Pi or SBC!
+                A Linux SBC already features its own 40-pin GPIO header. In OpenPisoWiFi, the ESP32 is designed specifically to pair with <strong>OpenWrt Gigabit Routers</strong> (tested and verified on the <strong>Ruijie RG-EW1200G Pro</strong>, or other OpenWrt-supported models) so you can build a complete commercial vending machine with high-power AC1200 Wi-Fi without buying an expensive Linux SBC or SBC!
               </p>
             </div>
           </div>

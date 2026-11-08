@@ -41,8 +41,8 @@ export function isValidMac(mac: string): boolean {
  * Extracts client MAC address from an IP address or request hints.
  * 
  * 3-Tier Multi-Layer Resolution Strategy for OpenWrt Router Architecture:
- * 1. Read `/proc/net/arp` (Raspberry Pi Layer 2 ARP Cache) - When RPi is plugged into
- *    OpenWrt LAN port (192.168.1.240), all bridged Wi-Fi client packets arriving at RPi
+ * 1. Read `/proc/net/arp` (Linux SBC Layer 2 ARP Cache) - When SBC is plugged into
+ *    OpenWrt LAN port (192.168.1.240), all bridged Wi-Fi client packets arriving at SBC
  *    retain the client's Layer 2 MAC address in the kernel table.
  * 2. Linux `ip neigh show <ip>` or `arp -n <ip>` fallback.
  * 3. Query OpenWrt Router (`192.168.1.1`) directly via Daemon `/api/router/arp?ip=...`
@@ -72,7 +72,7 @@ export async function getMacFromIp(ip: string, explicitMacHint?: string | null):
     return null;
   }
 
-  // 1. High-Performance Linux Kernel ARP Cache lookup (/proc/net/arp on RPi)
+  // 1. High-Performance Linux Kernel ARP Cache lookup (/proc/net/arp on SBC)
   try {
     if (fs.existsSync('/proc/net/arp')) {
       const arpData = fs.readFileSync('/proc/net/arp', 'utf-8');

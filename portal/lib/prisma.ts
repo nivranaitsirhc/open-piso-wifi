@@ -77,7 +77,7 @@ export const prisma =
 globalForPrisma.prisma = prisma;
 
 /**
- * Configure SQLite PRAGMAs for Raspberry Pi performance:
+ * Configure SQLite PRAGMAs for Linux SBC performance:
  * - WAL (Write-Ahead Logging): Drastically reduces SD card wear & permits concurrent reads/writes
  * - synchronous = NORMAL: Balances durability and SD card write cycles
  * - busy_timeout = 15000: Prevents database locked errors during concurrent traffic bursts

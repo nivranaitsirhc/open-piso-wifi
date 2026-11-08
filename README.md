@@ -2,16 +2,16 @@
 
 <div align="center">
 
-![OpenPisoWiFi Banner](https://img.shields.io/badge/System-v1.0.0-blue?style=for-the-badge&logo=raspberrypi&logoColor=white)
+![OpenPisoWiFi Banner](https://img.shields.io/badge/System-v1.0.0-blue?style=for-the-badge&logo=LinuxSBC&logoColor=white)
 ![Portal Version](https://img.shields.io/badge/Portal-v1.0.0-emerald?style=for-the-badge&logo=nextdotjs&logoColor=white)
 ![Daemon Version](https://img.shields.io/badge/Daemon-v1.0.0-purple?style=for-the-badge&logo=nodedotjs&logoColor=white)
 ![OpenWrt](https://img.shields.io/badge/OpenWrt-25.12.5%20(Stable)-red?style=for-the-badge&logo=openwrt&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)
 
 **Next-Generation Full-Stack Piso Wi-Fi Vending System & Captive Paywall**  
-*Powered by **Ruijie RG-EW1200G Pro (OpenWrt Gigabit Router)** + **Raspberry Pi Paywall Controller***
+*Powered by **Ruijie RG-EW1200G Pro (OpenWrt Gigabit Router)** + **Linux SBC Paywall Controller***
 
-[Landing Page](https://openpisowifi.nicolei.games) • [Multi-Architecture Guide](docs/MULTI_ARCHITECTURE_GUIDE.md) • [Features](#-key-features) • [Network Architecture](#-network-architecture--addressing-scheme) • [Hardware Wiring](#-hardware-wiring-diagram-raspberry-pi-gpio) • [Installation](#-installation-guide-raspberry-pi--openwrt) • [Admin Portal](#-accessing-the-applications) • [Cloud Fleet](#-cloud-fleet-management-supabase) • [Daemon API](#-hardware-daemon-rest-api-reference)
+[Landing Page](https://openpisowifi.nicolei.games) • [Multi-Architecture Guide](docs/MULTI_ARCHITECTURE_GUIDE.md) • [Features](#-key-features) • [Network Architecture](#-network-architecture--addressing-scheme) • [Hardware Wiring](#-hardware-wiring-diagram-linux-sbc-gpio) • [Installation](#-installation-guide-linux-sbc--openwrt) • [Admin Portal](#-accessing-the-applications) • [Cloud Fleet](#-cloud-fleet-management-supabase) • [Daemon API](#-hardware-daemon-rest-api-reference)
 
 </div>
 
@@ -19,7 +19,7 @@
 
 ## 📖 Overview
 
-**OpenPisoWiFi** is a production-grade, highly responsive open-source Piso Wi-Fi vending machine, captive paywall, and multi-architecture kiosk controller system. It cleanly decouples gigabit routing, dual-band Wi-Fi broadcasting, and kernel-level packet filtering on an **OpenWrt Router** or **Standalone Linux Gateway**, with coin pulse aggregation via an **ESP32 microcontroller bridge** or direct **Raspberry Pi GPIO**, and centralized telemetry backed by free **Supabase Cloud Fleet Management**.
+**OpenPisoWiFi** is a production-grade, highly responsive open-source Piso Wi-Fi vending machine, captive paywall, and multi-architecture kiosk controller system. It cleanly decouples gigabit routing, dual-band Wi-Fi broadcasting, and kernel-level packet filtering on an **OpenWrt Router** or **Standalone Linux Gateway**, with coin pulse aggregation via an **ESP32 microcontroller bridge** or direct **Linux SBC GPIO**, and centralized telemetry backed by free **Supabase Cloud Fleet Management**.
 
 🌐 **Official Website / Landing Page**: [https://openpisowifi.nicolei.games/](https://openpisowifi.nicolei.games/)
 
@@ -31,7 +31,7 @@ By utilizing native Linux `nftables` sets with kernel-level expiry timeouts, int
 
 ### 📱 Customer Captive Portal
 - **Glassmorphic Mobile-First UI**: High-converting, responsive dark mode interface designed for all mobile browsers.
-- **🪙 Smart Multi-Coin Acceptor Support**: Real-time coin pulse detection (₱1, ₱5, ₱10, ₱20) via Raspberry Pi GPIO with software pulse-train aggregation (300ms window).
+- **🪙 Smart Multi-Coin Acceptor Support**: Real-time coin pulse detection (₱1, ₱5, ₱10, ₱20) via Linux SBC GPIO with software pulse-train aggregation (300ms window).
 - **🔒 Inhibit Gate & "Insert Coin" Flow**: The coin slot stays physically blocked (Inhibit line HIGH) when users browse the portal. Clicking **"Insert Coin"** unlocks the slot (Inhibit LOW) for a configurable duration (default: 90 seconds) with an interactive countdown timer.
 - **⚡ Instant 10.0.0.1 Mobile Shortcut**: Fast 8-character shortcut (`http://10.0.0.1/`) that intercepts customer requests and lands directly on the portal without typing long IP addresses or ports.
 - **🔍 Real Client MAC Preservation**: Direct Layer-2 captive routing bypasses NAT masquerading to ensure the customer's actual device MAC address is captured and authorized accurately.
@@ -45,7 +45,7 @@ By utilizing native Linux `nftables` sets with kernel-level expiry timeouts, int
 ### 💻 Admin Dashboard (`/admin` - Default PIN: `1234`)
 - **📈 Real-Time Revenue Analytics**: Live sales metrics, today's income, all-time earnings, and active session counts.
 - **💰 Cash Box Auditing**: Live coin vault tracker with collection audit logging and one-click cash drawer reset.
-- **🛠️ Interactive 40-Pin GPIO Pinout Selector**: Visual 40-pin Raspberry Pi pinout diagram in Settings to easily configure COIN and INHIBIT pins with safety alerts for reserved pins (I2C/SPI/UART) and real-time hot-reloading.
+- **🛠️ Interactive 40-Pin GPIO Pinout Selector**: Visual 40-pin Linux SBC pinout diagram in Settings to easily configure COIN and INHIBIT pins with safety alerts for reserved pins (I2C/SPI/UART) and real-time hot-reloading.
 - **🩺 Hardware & Coin Debugger (`/admin` Hardware Tab)**: Dedicated diagnostic console to monitor live coin pulses, verify multi-coin detection (₱1, ₱5, ₱10, ₱20), toggle Inhibit states (Enable/Block), clear pulse counters, and export logs as JSON.
 - **👥 Active Session Manager**: Real-time table of connected customers with IP, MAC, remaining time, pause state, bonus time addition (`+15m`), and kick/disconnect controls.
 - **🛡️ Device Manager (VIP Whitelist & Blacklist)**:
@@ -58,7 +58,7 @@ By utilizing native Linux `nftables` sets with kernel-level expiry timeouts, int
 - **⚡ Traffic Control QoS Bandwidth Limiter**: Apply global download and upload speed limits using OpenWrt traffic control (`tc-tiny` / `tbf` on `br-lan`).
 - **🎫 Batch Voucher Generator & Print Studio**: Bulk-generate voucher codes with custom durations and expiry days, and open ready-to-print layouts formatted for 58mm/80mm thermal receipt printers or standard A4 sheets.
 - **🩺 System Health & Telemetry**: Live CPU temperature, RAM usage, storage space, OpenWrt CPU load, uptime, and Dropbear SSH status.
-- **⚡ Remote Power Controls**: One-click remote reboot of the OpenWrt router or Raspberry Pi, and manual flush of firewall authorization tables.
+- **⚡ Remote Power Controls**: One-click remote reboot of the OpenWrt router or Linux SBC, and manual flush of firewall authorization tables.
 - **🔄 1-Click State-Preserving OTA Updates**: Update to the latest release directly from the web interface or terminal in under 5 seconds without losing database records, active client sessions, or custom Wi-Fi credentials.
 
 ---
@@ -68,14 +68,14 @@ By utilizing native Linux `nftables` sets with kernel-level expiry timeouts, int
 The architecture leaves the OpenWrt router address untouched while providing seamless mobile customer access:
 
 - **Router Gateway (Untouched)**: OpenWrt remains at its standard default **`192.168.1.1`** (preserving native LuCI Web UI on ports 80 and 443).
-- **Raspberry Pi Portal**: Hosted at static IP **`192.168.1.240`**.
+- **Linux SBC Portal**: Hosted at static IP **`192.168.1.240`**.
 - **Friendly Domain**: Accessible via **`http://wifi.local/`** (resolved via OpenWrt `dnsmasq`).
 - **Direct Mobile Shortcut**: Accessible via **`http://10.0.0.1/`** (alias `10.0.0.1/32` bound to `br-lan` and redirected to the portal).
 
 | Device | Role | IP Address | Description |
 | :--- | :--- | :--- | :--- |
 | **Ruijie RG-EW1200G Pro** | OpenWrt Gateway & AP | **`192.168.1.1`** (Untouched) | Dual-band AP (2.4GHz & 5GHz), DHCP server, dedicated `nftables` captive firewall & dnsmasq domain host |
-| **Raspberry Pi** | Paywall & Hardware Daemon | **`192.168.1.240`** | Next.js 16 Web Portal (:3000), Hardware Daemon (:4000), Smart Coin Slot & Inhibit Control (Default: PIN 3 / BCM 2 Coin, PIN 5 / BCM 3 Inhibit) |
+| **Linux SBC** | Paywall & Hardware Daemon | **`192.168.1.240`** | Next.js 16 Web Portal (:3000), Hardware Daemon (:4000), Smart Coin Slot & Inhibit Control (Default: PIN 3 / BCM 2 Coin, PIN 5 / BCM 3 Inhibit) |
 | **Wi-Fi Clients** | Smartphones / Laptops | `192.168.1.10 - 192.168.1.230` | Dynamic DHCP clients connecting to open Wi-Fi SSIDs |
 
 ---
@@ -98,9 +98,9 @@ graph TD
     Clients["📱 Mobile Phones / Laptops"] -->|"Connect to Open Wi-Fi"| AP24
     Clients -->|"Connect to Open Wi-Fi"| AP5G
     
-    Router -->|"LAN Port 1 Ethernet"| RPi["🍓 Raspberry Pi: 192.168.1.240"]
+    Router -->|"LAN Port 1 Ethernet"| SBC["🍓 Linux SBC: 192.168.1.240"]
     
-    subgraph RaspberryPi ["Raspberry Pi Paywall: 192.168.1.240"]
+    subgraph LinuxSBC ["Linux SBC Paywall: 192.168.1.240"]
         CoinSlot["🪙 Multi-Coin Acceptor: CL168 / Allan"]
         Daemon["⚡ Hardware Daemon :4000"]
         Portal["🌐 Next.js 16 Web Portal :3000"]
@@ -127,36 +127,36 @@ graph TD
 
 ---
 
-## 🔌 Hardware Wiring Diagram (Raspberry Pi GPIO)
+## 🔌 Hardware Wiring Diagram (Linux SBC GPIO)
 
-Multi-coin acceptors (e.g. **CL168**, **Allan 1239A**, **HX-616**) operate on **12V DC** power supply. The Raspberry Pi controls the slot via **Coin Signal (Input)** and **Inhibit Line (Output)**.
+Multi-coin acceptors (e.g. **CL168**, **Allan 1239A**, **HX-616**) operate on **12V DC** power supply. The Linux SBC controls the slot via **Coin Signal (Input)** and **Inhibit Line (Output)**.
 
 > [!CAUTION]
 > **Voltage Protection & Common Ground!**  
-> 1. Connecting 12V directly to the Raspberry Pi GPIO will **permanently burn** the SoC. The **Coin Signal** must have a **10kΩ series resistor** inline before reaching the GPIO pin. No optocoupler needed.
-> 2. The 12V power supply **negative / GND terminal MUST be connected to the Raspberry Pi GND pin** for a shared ground reference.
+> 1. Connecting 12V directly to the Linux SBC GPIO will **permanently burn** the SoC. The **Coin Signal** must have a **10kΩ series resistor** inline before reaching the GPIO pin. No optocoupler needed.
+> 2. The 12V power supply **negative / GND terminal MUST be connected to the Linux SBC GND pin** for a shared ground reference.
 
 ```
   +-------------------------------------+
   |     🪙 Multi-Coin Acceptor (CL168)  |
   |  • 12V DC Power (+)                 | <--- 12V 2A Power Supply (+)
-  |  • Ground / DC Power (-)            | <--- 12V Supply GND & RPi GND (Pin 6/9/14/20)
-  |  • Inhibit / Block Line             | <--- Raspberry Pi Pin 5 (BCM 3 / Inhibit)
+  |  • Ground / DC Power (-)            | <--- 12V Supply GND & SBC GND (Pin 6/9/14/20)
+  |  • Inhibit / Block Line             | <--- Linux SBC Pin 5 (BCM 3 / Inhibit)
   |  • Coin Signal Pulse Line           |
   +------------------+------------------+
                      │
                      │   [ 10kΩ Resistor in series ]
-                     └───/\/\/\/\───────┬───────────────────> Raspberry Pi Physical Pin 3
+                     └───/\/\/\/\───────┬───────────────────> Linux SBC Physical Pin 3
                                         │                     (BCM GPIO 2 / SDA1)
                                  [ 4.7kΩ Resistor ]*
                                         │  *(Optional divider if coin line outputs 12V)
   +-------------------------------------┴-------------------+
-  |  Raspberry Pi Ground (Physical Pin 6 / 9 / 14 / 20 / 39)|
+  |  Linux SBC Ground (Physical Pin 6 / 9 / 14 / 20 / 39)|
   +---------------------------------------------------------+
 ```
 
 ### Pin Mapping Reference:
-| Function | Raspberry Pi Physical Pin | BCM Number (Software) | WiringPi Number | Description / Logic |
+| Function | Linux SBC Physical Pin | BCM Number (Software) | WiringPi Number | Description / Logic |
 | :--- | :--- | :--- | :--- | :--- |
 | **COIN Input** | **Pin 3** | **BCM 2** (SDA1) | GPIO 8 | Falling-edge pulse train (300ms window) |
 | **INHIBIT Output**| **Pin 5** | **BCM 3** (SCL1) | GPIO 9 | `HIGH` = Slot Blocked, `LOW` = Slot Accepts Coins |
@@ -167,19 +167,19 @@ Multi-coin acceptors (e.g. **CL168**, **Allan 1239A**, **HX-616**) operate on **
 
 ### Physical Cabling:
 1. **WAN Port (Ruijie Router)**: Connect Ethernet cable to your ISP modem / Fiber ONU.
-2. **LAN Port 1 (Ruijie Router)**: Connect Ethernet cable to the Raspberry Pi Ethernet port (`eth0`).
+2. **LAN Port 1 (Ruijie Router)**: Connect Ethernet cable to the Linux SBC Ethernet port (`eth0`).
 3. **LAN Port 2 / 3**: Available for PC maintenance or wired network expansion.
 
 ---
 
-## 🚀 Installation Guide (Raspberry Pi & OpenWrt)
+## 🚀 Installation Guide (Linux SBC & OpenWrt)
 
 OpenPisoWiFi uses **pre-compiled release bundles** distributed via GitHub Releases. There is **zero client-side compiling**, eliminating RAM exhaustion, SD-card wear, and 25-minute build times. First-time setup finishes in **~30 seconds**.
 
 ### 📡 Step 0: Flash OpenWrt 25.12.5 on Ruijie Router (If not yet flashed)
 Download official **OpenWrt 25.12.5** for **Ruijie RG-EW1200G Pro v1.1** from the [OpenWrt Firmware Selector](https://firmware-selector.openwrt.org/?version=25.12.5&target=ramips%2Fmt7621&id=ruijie_rg-ew1200g-pro-v1.1) or use the 1-click downloader:
 ```bash
-# On Linux / Raspberry Pi:
+# On Linux / Linux SBC:
 bash firmware/ruijie-rg-ew1200g-pro/download-firmware.sh
 
 # On Windows:
@@ -187,8 +187,8 @@ powershell -ExecutionPolicy Bypass -File firmware\ruijie-rg-ew1200g-pro\download
 ```
 Follow the [Ruijie OpenWrt 25.12.5 Guide](firmware/ruijie-rg-ew1200g-pro/README.md) to flash the router.
 
-### 🍓 Step 1: Install on Raspberry Pi
-Open a terminal on your Raspberry Pi (via SSH or monitor) and run the 1-line automated installer:
+### 🍓 Step 1: Install on Linux SBC
+Open a terminal on your Linux SBC (via SSH or monitor) and run the 1-line automated installer:
 
 ```bash
 # ⚡ Recommended 1-Line Installer:
@@ -214,7 +214,7 @@ bash scripts/install.sh
 ---
 
 ### 📡 Step 2: Deploy to Ruijie OpenWrt Router (`192.168.1.1`)
-Connect your Raspberry Pi's Ethernet port to LAN port 1 on the Ruijie RG-EW1200G Pro OpenWrt router, then run:
+Connect your Linux SBC's Ethernet port to LAN port 1 on the Ruijie RG-EW1200G Pro OpenWrt router, then run:
 
 ```bash
 bash scripts/deploy-router.sh --fresh
@@ -227,7 +227,7 @@ bash scripts/deploy-router.sh --fresh
 - Configures dual-band open Wi-Fi SSIDs: **`OpenPisoWiFi` (2.4GHz)** and **`OpenPisoWiFi_5G` (5GHz)**.
 - Binds shortcut IP alias `10.0.0.1/32` to `br-lan`.
 - Installs and activates the dedicated `nftables` captive firewall ruleset (`table inet piso_portal`).
-- Configures Dropbear SSH key authentication so the Raspberry Pi daemon can manage the router without passwords.
+- Configures Dropbear SSH key authentication so the Linux SBC daemon can manage the router without passwords.
 
 ---
 
@@ -248,7 +248,7 @@ Updates are atomic and **state-preserving**. Upgrades finish in **~3–5 seconds
 4. Monitor the live terminal logs as the update downloads, restores database state, and restarts services.
 
 ### Method B: Terminal CLI Update
-On the Raspberry Pi:
+On the Linux SBC:
 ```bash
 bash scripts/update.sh
 ```
@@ -264,14 +264,14 @@ bash scripts/update.sh
 
 ## 🧹 Uninstallation & System Cleanup
 
-To cleanly remove OpenPisoWiFi from your Raspberry Pi or host system, use the automated uninstaller:
+To cleanly remove OpenPisoWiFi from your Linux SBC or host system, use the automated uninstaller:
 
 ```bash
 # Standard interactive uninstallation (prompts before actions, creates backup, keeps data safe):
 sudo bash scripts/uninstall.sh
 
 # Or via npm script:
-npm run uninstall:rpi
+npm run uninstall:SBC
 ```
 
 ### Uninstaller Options & Flags:
@@ -282,7 +282,7 @@ npm run uninstall:rpi
 | `sudo bash scripts/uninstall.sh --keep-data` | **Default:** Keeps `dev.db` and configuration files intact for future reinstall |
 | `sudo bash scripts/uninstall.sh --purge` | Purges all local databases (`dev.db`), logs, and `.env` configs |
 | `sudo bash scripts/uninstall.sh --router` | Also connects to OpenWrt router via SSH and cleans up captive firewall and DNS rules |
-| `sudo bash scripts/uninstall.sh --gateway` | Also removes standalone Raspberry Pi gateway settings (`dnsmasq` & `nftables`) |
+| `sudo bash scripts/uninstall.sh --gateway` | Also removes standalone Linux SBC gateway settings (`dnsmasq` & `nftables`) |
 | `sudo bash scripts/uninstall.sh --revert-network` | Reverts static IP configuration in `/etc/dhcpcd.conf` or NetworkManager back to DHCP |
 | `sudo bash scripts/uninstall.sh -y` | Non-interactive mode (skips confirmation prompts) |
 
@@ -330,7 +330,7 @@ flowchart LR
     Repo -->|Trigger Workflow| Actions[⚙️ GitHub Actions CI]
     Actions -->|Architecture-specific bundles| Dist[📦 opw-linux-{armv7,arm64,amd64}.tar.gz]
     Dist -->|Publish| Release[🚀 GitHub Releases]
-    Release -->|1-Click OTA| Machines[🍓 Raspberry Pi Fleet]
+    Release -->|1-Click OTA| Machines[🍓 Linux SBC Fleet]
 ```
 
 ### Local Offline Build:
@@ -433,7 +433,7 @@ The daemon runs on port `4000` and provides a comprehensive REST interface:
 
 ## 🛠 Useful Management & Troubleshooting Commands
 
-### Raspberry Pi Service Management:
+### Linux SBC Service Management:
 ```bash
 # Check service status
 sudo systemctl status pisowifi-portal.service
@@ -501,7 +501,7 @@ curl http://127.0.0.1:4000/api/hardware/debug
 
 OpenPisoWiFi is a 100% community-driven, vendor-neutral open-source project. We actively welcome contributions, real-world field benchmarks, and support for alternative hardware platforms:
 
-- **Single-Board Computers & Mini PCs**: Tested on Raspberry Pi 3B+/4B/5. Actively seeking testers and GPIO driver profiles for **Orange Pi** (Zero 2W, Zero 3, 3B, 5/5 Plus), **Banana Pi**, **NanoPi**, and **x86_64 thin clients / mini PCs** (Intel N100, HP T630, Dell Wyse).
+- **Single-Board Computers & Mini PCs**: Tested on ARM SBCs. Actively seeking testers and GPIO driver profiles for **Orange Pi** (Zero 2W, Zero 3, 3B, 5/5 Plus), **Banana Pi**, **NanoPi**, and **x86_64 thin clients / mini PCs** (Intel N100, HP T630, Dell Wyse).
 - **Routers & Access Points**: Tested on Ruijie Reyee EW1200G Pro (OpenWrt 25.12.5). Seeking test reports and UCI configuration profiles for **TP-Link** (Archer C6/A6, WR840N, WR940N), **GL.iNet** (Flint, Beryl AX, Opal), **Mikrotik RouterOS**, and **Ubiquiti UniFi APs**.
 - **Payment & Vending Hardware**: Tested with Allan and Weiyu multi-coinslots. Open for integration with **ICT Paper Bill Acceptors** (P70, L70, TP70), motorized coin hoppers, and custom pulse validators.
 

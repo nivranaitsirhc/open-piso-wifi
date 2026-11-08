@@ -18,7 +18,7 @@ import {
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 
-// BCM GPIO number → Physical Pin number (Raspberry Pi 40-pin J8 header)
+// BCM GPIO number → Physical Pin number (Linux SBC 40-pin J8 header)
 const BCM_TO_PHYSICAL: Record<number, number> = {
   0: 27, 1: 28, 2: 3, 3: 5, 4: 7, 5: 29, 6: 31, 7: 26,
   8: 24, 9: 21, 10: 19, 11: 23, 12: 32, 13: 33, 14: 8, 15: 10,
@@ -44,7 +44,7 @@ export interface PiPin {
     | 'id_sd';
 }
 
-// Full 40-pin Raspberry Pi J8 header definition
+// Full 40-pin Linux SBC J8 header definition
 export const PI_PINS: PiPin[] = [
   { physical: 1,  bcm: null, wiringPi: null, name: '3.3V Power',         type: 'power3v3' },
   { physical: 2,  bcm: null, wiringPi: null, name: '5V Power',           type: 'power5v' },
@@ -279,7 +279,7 @@ export function GpioPinSelector({ coinBcm, inhibitBcm, onChange }: GpioPinSelect
         className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl border-2 border-black bg-white dark:bg-[#1c241f] text-black dark:text-white font-extrabold text-xs shadow-neo-sm hover:translate-x-[1px] hover:translate-y-[1px] transition-all cursor-pointer"
       >
         <Cpu className="w-4 h-4 text-amber-500" />
-        <span>Open Raspberry Pi 40-Pin GPIO Interactive Map (Zoomable Pinout)</span>
+        <span>Open Linux SBC 40-Pin GPIO Interactive Map (Zoomable Pinout)</span>
         <Maximize2 className="w-3.5 h-3.5 ml-1 text-neutral-500" />
       </button>
 
@@ -297,7 +297,7 @@ export function GpioPinSelector({ coinBcm, inhibitBcm, onChange }: GpioPinSelect
                 </div>
                 <div>
                   <h3 className="text-base sm:text-lg font-black font-display tracking-tight text-black dark:text-white flex items-center gap-2">
-                    <span>Raspberry Pi 40-Pin GPIO Interactive Pinout</span>
+                    <span>Linux SBC 40-Pin GPIO Interactive Pinout</span>
                   </h3>
                   <p className="text-xs font-bold text-neutral-600 dark:text-[#b7c6c2]">
                     Select or zoom pins for coin drop pulse detection & electronic inhibit lockout
@@ -431,7 +431,7 @@ export function GpioPinSelector({ coinBcm, inhibitBcm, onChange }: GpioPinSelect
                       className="select-none drop-shadow-md"
                       style={{ fontFamily: 'ui-monospace, SFMono-Regular, monospace' }}
                     >
-                      {/* Raspberry Pi Header Board */}
+                      {/* Linux SBC Header Board */}
                       <rect
                         x="160"
                         y="12"
@@ -860,7 +860,7 @@ export function GpioPinSelector({ coinBcm, inhibitBcm, onChange }: GpioPinSelect
                 </div>
               ) : (
                 <div className="text-xs font-bold text-neutral-500 text-center py-1">
-                  Click or hover any pin on the Raspberry Pi board to inspect and assign it.
+                  Click or hover any pin on the Linux SBC board to inspect and assign it.
                 </div>
               )}
             </div>

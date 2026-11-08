@@ -12,7 +12,7 @@ This guide details the three supported deployment builds for OpenPisoWiFi, the u
 | Capability | Build 1: Pi + OpenWrt Router | Build 2: Universal Pi Gateway | Build 3: ESP32 + OpenWrt (No Pi) |
 |---|---|---|---|
 | **Internet Enforcement** | OpenWrt `nftables` / `fw4` over SSH | **Local Linux `nftables` kernel sets** | OpenWrt `nftables` via local agent |
-| **Captive Portal Host** | Raspberry Pi (Next.js :3000) | Raspberry Pi (Next.js :3000) | OpenWrt router (`uhttpd` / lightweight) |
+| **Captive Portal Host** | Linux SBC (Next.js :3000) | Linux SBC (Next.js :3000) | OpenWrt router (`uhttpd` / lightweight) |
 | **Coinslot Hardware** | Pi GPIO + ESP32 Satellites | Pi GPIO + ESP32 Satellites | ESP32 Satellites only |
 | **Wi-Fi Hardware** | OpenWrt-flashed router (e.g. Ruijie) | **Any AP, Any Brand** (AP/Bridge mode) | OpenWrt-flashed router |
 | **Local Admin Console** | Yes (`http://10.0.0.1:3000/admin`) | Yes (`http://10.0.0.1:3000/admin`) | Setup page only (Wi-Fi/Pins) |
@@ -30,7 +30,7 @@ This guide details the three supported deployment builds for OpenPisoWiFi, the u
 
 ## 2. Build 2: Universal Pi Gateway Setup (Plug-and-Play)
 
-Build 2 turns the Raspberry Pi into the central gateway and router itself. Any consumer Wi-Fi router or access point (TP-Link, Tenda, Asus, Ruijie, Mikrotik) can be plugged in without flashing OpenWrt, provided it is configured in **AP / Bridge Mode**.
+Build 2 turns the Linux SBC into the central gateway and router itself. Any consumer Wi-Fi router or access point (TP-Link, Tenda, Asus, Ruijie, Mikrotik) can be plugged in without flashing OpenWrt, provided it is configured in **AP / Bridge Mode**.
 
 ### Physical Topology:
 ```
@@ -40,7 +40,7 @@ ISP Modem/ONT ──[Ethernet]──▶ [Pi eth0: WAN, DHCP Client]
                                                                                           └── Customer phones & ESP32s
 ```
 
-### Installation Steps on Raspberry Pi OS:
+### Installation Steps on Armbian/Debian/Ubuntu:
 ```bash
 # 1. Run the automated gateway setup script
 sudo ./scripts/setup-pi-gateway.sh --wan-iface eth0 --lan-iface eth1

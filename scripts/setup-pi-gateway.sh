@@ -1,8 +1,8 @@
 #!/bin/bash
 # ==============================================================================
-# 🚀 OpenPisoWiFi - Raspberry Pi Standalone Gateway Setup (Profile 2)
+# 🚀 OpenPisoWiFi - Linux SBC Standalone Gateway Setup (Profile 2)
 # ==============================================================================
-# Turns a Raspberry Pi into a universal router & captive portal gateway.
+# Turns a Linux SBC into a universal router & captive portal gateway.
 # - The built-in Ethernet is preferred as WAN (ISP modem/ONT via DHCP)
 # - A USB Ethernet adapter is preferred as LAN (connected to an AP/bridge)
 # - nftables: Kernel-level hardware-speed NAT, authorization sets, and captive redirect
@@ -237,7 +237,7 @@ if [ "$DRY_RUN" = false ]; then
 fi
 
 echo -e "${CYAN}==============================================================${NC}"
-echo -e "${GREEN}🚀 Configuring Raspberry Pi Gateway (Profile 2 - Universal AP)${NC}"
+echo -e "${GREEN}🚀 Configuring Linux SBC Gateway (Profile 2 - Universal AP)${NC}"
 echo -e "${CYAN}==============================================================${NC}"
 echo -e "• WAN Interface (ISP)  : ${YELLOW}${WAN_IFACE}${NC}"
 echo -e "• LAN Interface (AP)   : ${YELLOW}${LAN_IFACE}${NC}"

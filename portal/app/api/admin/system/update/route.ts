@@ -87,7 +87,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true, message: 'Update process started (Dev Simulation)', state: globalUpdateState });
   }
 
-  // Production on Raspberry Pi / Linux SBC
+  // Production on Linux SBC / Linux SBC
   try {
     const args = [updateScript];
     if (isForce) args.push('--force');

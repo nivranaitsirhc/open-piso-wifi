@@ -9,12 +9,12 @@ Thank you for your interest in contributing to **OpenPisoWiFi**! As an open-sour
 ### Prerequisites
 - **Node.js**: v20.20.2
 - **Git**
-- Optional: Linux environment / Raspberry Pi / OpenWrt router for hardware testing
+- Optional: Linux environment / Linux SBC / OpenWrt router for hardware testing
 
 ### Project Structure
 - `landing/`: Standalone Next.js 16 showcase & documentation landing page (Tailwind CSS v4, Neo-Brutalism).
 - `portal/`: Next.js 16 (App Router) customer captive portal UI and local admin dashboard.
-- `daemon/`: Node.js Express background daemon for Raspberry Pi GPIO interrupt pulse handling, inhibit lines, and OpenWrt SSH orchestration.
+- `daemon/`: Node.js Express background daemon for Linux SBC GPIO interrupt pulse handling, inhibit lines, and OpenWrt SSH orchestration.
 - `openwrt/`: OpenWrt shell scripts, `uci` and `nftables` captive paywall firewall configurations.
 - `firmware/`: ESP32 Arduino C++ firmware for wireless multi-coinslot satellites.
 - `scripts/`: Automated installation, OTA update, and database repair tooling.
@@ -27,7 +27,7 @@ Thank you for your interest in contributing to **OpenPisoWiFi**! As an open-sour
 OpenPisoWiFi is vendor-neutral and actively open for community testing, hardware driver ports, and multi-device expansion!
 
 ### 1. Single Board Computers (SBCs) & x86 Mini PCs
-- **Verified**: Raspberry Pi 3B+, 4B, 5 (Debian 12 Bookworm, Ubuntu Server, DietPi).
+- **Verified**: Linux SBC 3B+, 4B, 5 (Debian 12 Bookworm, Ubuntu Server, DietPi).
 - **Open for Testing**:
   - **Orange Pi**: Zero 2W, Zero 3, 3B, 5 / 5 Plus.
   - **Banana Pi & NanoPi**: BPI-M4, NanoPi R2S / R4S / R5S.

@@ -232,12 +232,12 @@ export default function BuildGuidePage() {
                 <span>
                   {activeBuild === 1 && (
                     <>
-                      <strong>Currently Viewing: Build 1 (Industrial Standard).</strong> OpenWrt router offloads Gigabit NAT routing and captive firewalling. Raspberry Pi handles portal UI, tokens, and billing with 0% CPU strain.
+                      <strong>Currently Viewing: Build 1 (Industrial Standard).</strong> OpenWrt router offloads Gigabit NAT routing and captive firewalling. Linux SBC handles portal UI, tokens, and billing with 0% CPU strain.
                     </>
                   )}
                   {activeBuild === 2 && (
                     <>
-                      <strong>Currently Viewing: Build 2 (Universal Plug &amp; Play).</strong> The Raspberry Pi acts as the full NAT router &amp; DHCP server. You can plug in ANY store-bought Wi-Fi router (TP-Link, Tenda, Mercusys) in AP mode without flashing OpenWrt.
+                      <strong>Currently Viewing: Build 2 (Universal Plug &amp; Play).</strong> The Linux SBC acts as the full NAT router &amp; DHCP server. You can plug in ANY store-bought Wi-Fi router (TP-Link, Tenda, Mercusys) in AP mode without flashing OpenWrt.
                     </>
                   )}
                   {activeBuild === 3 && (
@@ -446,7 +446,7 @@ export default function BuildGuidePage() {
                 <div>
                   <h3 className="text-xl font-black">12V Centralized Power Supply</h3>
                   <p className="text-xs font-bold text-neutral-600 mt-1 leading-relaxed">
-                    12V 5A or 10A CCTV metal switching PSU. Powers router, coin acceptor, and Raspberry Pi from a single 220V plug with no voltage sags.
+                    12V 5A or 10A CCTV metal switching PSU. Powers router, coin acceptor, and Linux SBC from a single 220V plug with no voltage sags.
                   </p>
                 </div>
                 <div className="p-2.5 bg-neutral-100 rounded-xl font-mono text-[11px] text-neutral-800 space-y-0.5">
@@ -597,7 +597,7 @@ export default function BuildGuidePage() {
               <div className="text-xs font-mono text-neutral-400">
                 Target for {activeBuild === 1 ? 'Build 1' : activeBuild === 2 ? 'Build 2' : 'Build 3'}:{' '}
                 <span className="text-emerald-400 font-bold">
-                  {activeBuild === 3 ? 'ESP32 DevKit (GPIO 4 / GPIO 5)' : 'Raspberry Pi 40-Pin Header (Pins 3 & 5)'}
+                  {activeBuild === 3 ? 'ESP32 DevKit (GPIO 4 / GPIO 5)' : 'Linux SBC 40-Pin Header (Pins 3 & 5)'}
                 </span>
               </div>
             </div>
@@ -638,7 +638,7 @@ export default function BuildGuidePage() {
                                │                │          │                  │        │
                                ▼ (Direct)       ▼ (Pulse)  ▼ (5V Power)       ▼ (GND)  │
 ┌──────────────────────────────────────────────────────────────────────────────────────┴─┐
-│  🍓 RASPBERRY PI 3B+/4B/5  OR  🎛️ ESP32 DEVKIT CONTROLLER                               │
+│  🍓 ARM SBCs  OR  🎛️ ESP32 DEVKIT CONTROLLER                               │
 │                                                                                        │
 │   • Power IN: 5V (Direct from Buck Converter OUT+)  +  GND (Pin 6 Common Ground)       │
 │   • GPIO 2 (Physical Pin 3)  OR  ESP32 GPIO 4   ◄── VIA 10kΩ RESISTOR (Coin Pulse)     │
@@ -729,7 +729,7 @@ export default function BuildGuidePage() {
                   <thead>
                     <tr className="border-b-2 border-black/10 text-neutral-500">
                       <th className="py-2">FUNCTION</th>
-                      <th className="py-2">RASPBERRY PI PIN</th>
+                      <th className="py-2">Linux SBC PIN</th>
                       <th className="py-2">ESP32 PIN</th>
                       <th className="py-2">SIGNAL NOTES</th>
                     </tr>
@@ -822,10 +822,10 @@ export default function BuildGuidePage() {
                 <div className="bg-white neo-border-3 rounded-2xl p-6 neo-shadow space-y-3">
                   <div className="flex items-center gap-2">
                     <span className="px-2 py-0.5 bg-black text-[#ffe17c] font-mono text-xs font-black rounded">STEP 1</span>
-                    <h4 className="text-lg font-black">Prepare Raspberry Pi OS &amp; Install OpenPisoWiFi</h4>
+                    <h4 className="text-lg font-black">Prepare Armbian/Debian/Ubuntu &amp; Install OpenPisoWiFi</h4>
                   </div>
                   <p className="text-xs text-neutral-700 leading-relaxed">
-                    Flash <strong>Raspberry Pi OS Lite (64-bit)</strong> or Ubuntu Server onto your micro-SD card or NVMe SSD. Boot the Pi, connect via SSH, and run the automated setup installer:
+                    Flash <strong>Armbian/Debian/Ubuntu Lite (64-bit)</strong> or Ubuntu Server onto your micro-SD card or NVMe SSD. Boot the Pi, connect via SSH, and run the automated setup installer:
                   </p>
                   <div className="relative">
                     <pre className="p-3 bg-neutral-900 text-amber-300 rounded-xl font-mono text-xs overflow-x-auto">
@@ -851,7 +851,7 @@ export default function BuildGuidePage() {
                     <h4 className="text-lg font-black">Flash &amp; Provision OpenWrt Router (Tested on Ruijie EW1200G Pro)</h4>
                   </div>
                   <p className="text-xs text-neutral-700 leading-relaxed">
-                    Connect an Ethernet cable from Raspberry Pi <code>eth0</code> to <strong>LAN 1</strong> port on your OpenWrt router (e.g. Ruijie EW1200G Pro). Then execute our automated router deployer:
+                    Connect an Ethernet cable from Linux SBC <code>eth0</code> to <strong>LAN 1</strong> port on your OpenWrt router (e.g. Ruijie EW1200G Pro). Then execute our automated router deployer:
                   </p>
                   <div className="relative">
                     <pre className="p-3 bg-neutral-900 text-amber-300 rounded-xl font-mono text-xs overflow-x-auto">
@@ -906,7 +906,7 @@ export default function BuildGuidePage() {
                   <span className="text-2xl">🔌</span>
                   <div>
                     <h3 className="font-black text-sm sm:text-base">Step-by-Step Guide for Build 2 (Universal Standalone Pi Gateway)</h3>
-                    <p className="text-xs text-neutral-700">Plug &amp; play: Raspberry Pi acts as router &amp; firewall; any standard store-bought AP works.</p>
+                    <p className="text-xs text-neutral-700">Plug &amp; play: Linux SBC acts as router &amp; firewall; any standard store-bought AP works.</p>
                   </div>
                 </div>
                 <span className="px-2.5 py-1 bg-blue-600 text-white font-black text-xs rounded">ACTIVE</span>
@@ -917,10 +917,10 @@ export default function BuildGuidePage() {
                 <div className="bg-white neo-border-3 rounded-2xl p-6 neo-shadow space-y-3">
                   <div className="flex items-center gap-2">
                     <span className="px-2 py-0.5 bg-black text-[#ffe17c] font-mono text-xs font-black rounded">STEP 1</span>
-                    <h4 className="text-lg font-black">Install OpenPisoWiFi on Raspberry Pi 4 or 5</h4>
+                    <h4 className="text-lg font-black">Install OpenPisoWiFi on Linux SBC 4 or 5</h4>
                   </div>
                   <p className="text-xs text-neutral-700 leading-relaxed">
-                    Run the automated installation script on a fresh install of Raspberry Pi OS:
+                    Run the automated installation script on a fresh install of Armbian/Debian/Ubuntu:
                   </p>
                   <pre className="p-3 bg-neutral-900 text-amber-300 rounded-xl font-mono text-xs overflow-x-auto">
                     <code>curl -fsSL https://openpisowifi.nicolei.games/install.sh | sudo bash</code>
@@ -1000,7 +1000,7 @@ export default function BuildGuidePage() {
                     <h4 className="text-lg font-black">Deploy Central Piso WiFi Daemon Server</h4>
                   </div>
                   <p className="text-xs text-neutral-700 leading-relaxed">
-                    Install OpenPisoWiFi on your central server, Raspberry Pi, or mini-PC on your local LAN:
+                    Install OpenPisoWiFi on your central server, Linux SBC, or mini-PC on your local LAN:
                   </p>
                   <pre className="p-3 bg-neutral-900 text-amber-300 rounded-xl font-mono text-xs overflow-x-auto">
                     <code>curl -fsSL https://openpisowifi.nicolei.games/install.sh | sudo bash</code>
@@ -1280,7 +1280,7 @@ export default function BuildGuidePage() {
                 </div>
 
                 <p className="text-xs text-neutral-700 leading-relaxed font-medium">
-                  Want direct remote web access to your physical Raspberry Pi&apos;s local admin dashboard (<code>http://10.0.0.1:3000/admin</code>) from anywhere on earth without opening ports or risking hacker scans? Use a free Cloudflare Tunnel.
+                  Want direct remote web access to your physical Linux SBC&apos;s local admin dashboard (<code>http://10.0.0.1:3000/admin</code>) from anywhere on earth without opening ports or risking hacker scans? Use a free Cloudflare Tunnel.
                 </p>
 
                 <div className="space-y-3 font-mono text-xs">
@@ -1292,7 +1292,7 @@ export default function BuildGuidePage() {
                     <ol className="list-decimal list-inside space-y-1.5 text-[11px] text-neutral-800 pt-1">
                       <li>In <a href="https://dash.cloudflare.com" target="_blank" rel="noreferrer" className="font-bold underline text-orange-700">dash.cloudflare.com</a>, open <strong>Zero Trust</strong> ➔ <strong>Networks</strong> ➔ <strong>Tunnels</strong>.</li>
                       <li>Click <strong>Add a Tunnel</strong> (select <code>cloudflared</code>) and name it <code>pisowifi-gateway</code>.</li>
-                      <li>Run the single provided curl command on your Raspberry Pi terminal to install the lightweight daemon.</li>
+                      <li>Run the single provided curl command on your Linux SBC terminal to install the lightweight daemon.</li>
                       <li>Route public hostname (e.g. <code>kiosk1.yourdomain.com</code>) to <code>http://localhost:3000</code>. That&apos;s it!</li>
                     </ol>
                   </div>

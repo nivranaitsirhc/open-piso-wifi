@@ -34,7 +34,7 @@ for arg in "$@"; do
         --router-ip=*)
             ROUTER_IP="${arg#*=}"
             ;;
-        --portal-ip=*|--rpi-ip=*)
+        --portal-ip=*|--SBC-ip=*)
             RPI_IP="${arg#*=}"
             ;;
         --portal-domain=*|--domain=*)
@@ -349,11 +349,11 @@ table inet piso_portal {
     chain prerouting {
         type nat hook prerouting priority -150; policy accept;
 
-        # Allow Raspberry Pi (Paywall Server) outbound traffic without redirect
+        # Allow Linux SBC (Paywall Server) outbound traffic without redirect
         ip saddr ${RPI_IP} accept
 
         # Intercept HTTP requests directly addressed to 10.0.0.1 shortcut
-        # and forward to Raspberry Pi portal! This ensures that ANY connected customer
+        # and forward to Linux SBC portal! This ensures that ANY connected customer
         # who types 10.0.0.1 in their mobile browser will immediately land on the portal!
         ip daddr 10.0.0.1 tcp dport { 80, 3000 } dnat ip to ${RPI_IP}:${PORTAL_PORT}
 
@@ -366,11 +366,11 @@ table inet piso_portal {
         # Allow Router Gateway management (HTTP LuCI, HTTPS & SSH) for administration
         ip daddr ${ROUTER_IP} tcp dport { 22, 80, 443 } accept
 
-        # Redirect unauthenticated and blacklisted client HTTP (port 80) to Raspberry Pi Portal :${PORTAL_PORT}
+        # Redirect unauthenticated and blacklisted client HTTP (port 80) to Linux SBC Portal :${PORTAL_PORT}
         # Intercept external port 80 HTTP requests across all interfaces/SSIDs (br-lan, phy0-ap0, phy1-ap0, wlan0, wlan1)
         ip daddr != { ${ROUTER_IP}, ${RPI_IP}, 10.0.0.1 } tcp dport 80 dnat ip to ${RPI_IP}:${PORTAL_PORT}
 
-        # Allow Raspberry Pi other services (SSH, 3000, 4000)
+        # Allow Linux SBC other services (SSH, 3000, 4000)
         ip daddr ${RPI_IP} accept
 
         # Allow Router Gateway other services
@@ -381,7 +381,7 @@ table inet piso_portal {
     chain postrouting {
         type nat hook postrouting priority 100; policy accept;
 
-        # Masquerade traffic redirected to RPi so RPi replies back via OpenWrt
+        # Masquerade traffic redirected to SBC so SBC replies back via OpenWrt
         ip daddr ${RPI_IP} tcp dport ${PORTAL_PORT} masquerade
     }
 
@@ -410,11 +410,11 @@ table inet piso_portal {
         # Allow established / return traffic
         ct state established,related accept
 
-        # Allow Raspberry Pi (${RPI_IP}) full access to WAN/Internet
+        # Allow Linux SBC (${RPI_IP}) full access to WAN/Internet
         ip saddr ${RPI_IP} accept
         ip daddr ${RPI_IP} accept
 
-        # Allow all LAN clients (including banned) to reach Raspberry Pi Paywall Portal
+        # Allow all LAN clients (including banned) to reach Linux SBC Paywall Portal
         ip daddr ${RPI_IP} accept
 
         # Allow traffic within the local LAN (${ROUTER_NET_BASE}.0/24)

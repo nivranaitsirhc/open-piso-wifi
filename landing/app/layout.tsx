@@ -19,10 +19,10 @@ const spaceMono = Space_Mono({
 export const metadata: Metadata = {
   title: 'OpenPisoWiFi — Free & Open-Source Piso Wi-Fi Operating System',
   description: 'The modern, open-source Piso-WiFi operating system with zero license fees. Powered by Next.js, Linux nftables kernel routing, ESP32 satellite coinslots, and free Supabase cloud fleet telemetry.',
-  keywords: ['piso wifi', 'open source piso wifi', 'captive portal', 'openwrt', 'raspberry pi', 'esp32 coinslot', 'juanfi alternative', 'lpb alternative'],
+  keywords: ['piso wifi', 'open source piso wifi', 'captive portal', 'openwrt', 'Linux SBC', 'esp32 coinslot', 'juanfi alternative', 'lpb alternative'],
   openGraph: {
     title: 'OpenPisoWiFi — Free & Open-Source Piso Wi-Fi Operating System',
-    description: 'Stop paying vendor license fees. Run your vending hotspot on Raspberry Pi, OpenWrt, and ESP32 with enterprise-grade nftables and cloud fleet control.',
+    description: 'Stop paying vendor license fees. Run your vending hotspot on Linux SBC, OpenWrt, and ESP32 with enterprise-grade nftables and cloud fleet control.',
     type: 'website',
   },
 };

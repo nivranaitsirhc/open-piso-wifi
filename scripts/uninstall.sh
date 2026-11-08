@@ -2,7 +2,7 @@
 # ==============================================================================
 # 🧹 OpenPisoWiFi - Automated Uninstallation & Cleanup Script
 # ==============================================================================
-# Target: Raspberry Pi 3B+ / 4B / 5 / Linux SBC (Raspberry Pi OS / Debian / Ubuntu)
+# Target: ARM SBCs / Linux SBC (Armbian/Debian/Ubuntu / Debian / Ubuntu)
 # Features:
 #   - Safely stops, disables, and removes systemd background services
 #   - Removes port 80 iptables NAT redirection rules
@@ -113,7 +113,7 @@ while [[ $# -gt 0 ]]; do
             echo "  --router-ip=IP                OpenWrt router IP address (default from .env or 192.168.1.1)"
             echo "  --router-user=USER            OpenWrt SSH user (default from .env or root)"
             echo "  --router-port=PORT            OpenWrt SSH port (default from .env or 22)"
-            echo "  --gateway                     Also remove standalone Raspberry Pi gateway settings"
+            echo "  --gateway                     Also remove standalone Linux SBC gateway settings"
             echo "  --revert-network              Revert static IP in /etc/dhcpcd.conf / NetworkManager to DHCP"
             echo "  -h, --help                    Show this help message"
             exit 0

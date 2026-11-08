@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
         if (process.platform === 'linux') {
           // Trigger safe system reboot after 2 seconds
           exec('sleep 2 && sudo reboot');
-          return NextResponse.json({ success: true, message: 'Raspberry Pi is rebooting now...' });
+          return NextResponse.json({ success: true, message: 'Linux SBC is rebooting now...' });
         }
         return NextResponse.json({ success: true, message: 'Reboot simulated in development mode' });
       }

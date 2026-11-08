@@ -190,25 +190,25 @@ export function SystemMaintenanceCard({ gatewayType }: SystemMaintenanceCardProp
           </Button>
         </div>}
 
-        {/* Reboot Raspberry Pi */}
+        {/* Reboot Linux SBC */}
         <div className="p-4 rounded-xl bg-[#f8f6ee] dark:bg-[#111713] border-2 border-black dark:border-[#4a6052] flex flex-col justify-between sm:col-span-2 shadow-neo-sm">
           <div>
             <h3 className="text-xs font-black uppercase text-black dark:text-white flex items-center gap-1.5 mb-1 font-display">
               <Power className="w-3.5 h-3.5 text-rose-600" />
-              Reboot Raspberry Pi
+              Reboot Linux SBC
             </h3>
             <p className="text-[11px] font-semibold text-neutral-600 dark:text-[#b7c6c2] mb-3.5">
-              Safely reboots the Raspberry Pi system. The portal will be unreachable for ~45 seconds.
+              Safely reboots the Linux SBC system. The portal will be unreachable for ~45 seconds.
             </p>
           </div>
           <Button
             size="sm"
             variant="danger"
-            onClick={() => handleAction('reboot_rpi', 'Reboot the Raspberry Pi now? This will reboot the paywall server.')}
+            onClick={() => handleAction('reboot_rpi', 'Reboot the Linux SBC now? This will reboot the paywall server.')}
             isLoading={loadingAction === 'reboot_rpi'}
             className="w-full text-xs font-black shadow-neo-sm"
           >
-            Reboot Raspberry Pi
+            Reboot Linux SBC
           </Button>
         </div>
       </div>

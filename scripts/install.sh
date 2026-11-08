@@ -2,7 +2,7 @@
 # ==============================================================================
 # 📶 OpenPisoWiFi - Automated Pre-Built Installation Script
 # ==============================================================================
-# Target: Raspberry Pi 3B+ / 4B / 5 / Linux SBC (Raspberry Pi OS / Debian / Ubuntu)
+# Target: ARM SBCs / Linux SBC (Armbian/Debian/Ubuntu / Debian / Ubuntu)
 # Features:
 #   - High-Speed Pre-Built Release Installation (Zero client-side Next.js builds)
 #   - Fast ~30-second setup without RAM spikes or OOM crashes
@@ -316,7 +316,7 @@ if [ "$IS_INTERACTIVE" = true ]; then
 
     # Section A: Network & Device Addresses
     echo -e "${PURPLE}[A] Network & Device Addresses${NC}"
-    echo -e "  💡 Tip: RPi LAN IP serves the captive portal; router IP connects to your OpenWrt gateway."
+    echo -e "  💡 Tip: SBC LAN IP serves the captive portal; router IP connects to your OpenWrt gateway."
     if [ -n "$DYNAMIC_HOST_IP" ]; then
         echo -e "  🔍 Auto-detected Device IP:  ${GREEN}${DYNAMIC_HOST_IP}${NC}"
     fi
@@ -324,16 +324,16 @@ if [ "$IS_INTERACTIVE" = true ]; then
         echo -e "  🔍 Auto-detected Gateway IP: ${GREEN}${DYNAMIC_GATEWAY_IP}${NC}"
     fi
 
-    # 1. Raspberry Pi Static LAN IP (Strictly Required & Validated)
+    # 1. Linux SBC Static LAN IP (Strictly Required & Validated)
     while true; do
         if [ -n "$DEFAULT_PORTAL_IP" ]; then
-            ask_prompt "  • Raspberry Pi LAN IP (Required) [$DEFAULT_PORTAL_IP]: " "$DEFAULT_PORTAL_IP" PORTAL_IP
+            ask_prompt "  • Linux SBC LAN IP (Required) [$DEFAULT_PORTAL_IP]: " "$DEFAULT_PORTAL_IP" PORTAL_IP
         else
-            ask_prompt "  • Raspberry Pi LAN IP (Required, e.g. 192.168.1.50): " "" PORTAL_IP
+            ask_prompt "  • Linux SBC LAN IP (Required, e.g. 192.168.1.50): " "" PORTAL_IP
         fi
 
         if [ -z "$PORTAL_IP" ]; then
-            echo -e "    ${RED}❌ Raspberry Pi LAN IP is required. Please enter a valid IPv4 address.${NC}"
+            echo -e "    ${RED}❌ Linux SBC LAN IP is required. Please enter a valid IPv4 address.${NC}"
         elif ! validate_ipv4 "$PORTAL_IP"; then
             echo -e "    ${RED}❌ '${PORTAL_IP}' is not a valid IPv4 address. Each octet must be 0-255.${NC}"
         else
@@ -354,7 +354,7 @@ if [ "$IS_INTERACTIVE" = true ]; then
         elif ! validate_ipv4 "$ROUTER_IP"; then
             echo -e "    ${RED}❌ '${ROUTER_IP}' is not a valid IPv4 address.${NC}"
         elif [ "$ROUTER_IP" = "$PORTAL_IP" ]; then
-            echo -e "    ${RED}❌ Router Gateway IP cannot be identical to Raspberry Pi IP (${PORTAL_IP}).${NC}"
+            echo -e "    ${RED}❌ Router Gateway IP cannot be identical to Linux SBC IP (${PORTAL_IP}).${NC}"
         else
             break
         fi
@@ -396,9 +396,9 @@ else
     if [ -z "$PORTAL_IP" ]; then
         if [ -n "$DEFAULT_PORTAL_IP" ] && validate_ipv4 "$DEFAULT_PORTAL_IP"; then
             PORTAL_IP="$DEFAULT_PORTAL_IP"
-            echo -e "--> Auto-detected Raspberry Pi LAN IP: ${YELLOW}${PORTAL_IP}${NC}"
+            echo -e "--> Auto-detected Linux SBC LAN IP: ${YELLOW}${PORTAL_IP}${NC}"
         else
-            echo -e "${RED}Error: Raspberry Pi LAN IP is required and could not be detected.${NC}"
+            echo -e "${RED}Error: Linux SBC LAN IP is required and could not be detected.${NC}"
             echo -e "${RED}Please specify --ip <valid_ipv4> or run installer interactively.${NC}"
             exit 1
         fi
@@ -421,7 +421,7 @@ else
     fi
 fi
 
-echo -e "• Raspberry Pi LAN IP: ${YELLOW}${PORTAL_IP}:${PORTAL_PORT}${NC}"
+echo -e "• Linux SBC LAN IP: ${YELLOW}${PORTAL_IP}:${PORTAL_PORT}${NC}"
 echo -e "• OpenWrt Router:      ${YELLOW}${ROUTER_SSH_USER}@${ROUTER_IP}:${ROUTER_SSH_PORT} (${ROUTER_MODE})${NC}"
 echo -e "• Admin Security PIN:  ${YELLOW}${ADMIN_PIN}${NC}"
 echo -e "• Coin Slot GPIO:      ${YELLOW}GPIO ${COIN_GPIO_PIN}${NC} (changeable in Admin)"
@@ -824,7 +824,7 @@ Environment=NODE_ENV=production
 WantedBy=multi-user.target
 EOF
 
-# Port 80 to Portal Port redirection on Raspberry Pi
+# Port 80 to Portal Port redirection on Linux SBC
 sudo iptables -t nat -C PREROUTING -p tcp --dport 80 -j REDIRECT --to-port ${PORTAL_PORT} 2>/dev/null || sudo iptables -t nat -A PREROUTING -p tcp --dport 80 -j REDIRECT --to-port ${PORTAL_PORT} || true
 sudo iptables -t nat -C OUTPUT -p tcp -o lo --dport 80 -j REDIRECT --to-port ${PORTAL_PORT} 2>/dev/null || sudo iptables -t nat -A OUTPUT -p tcp -o lo --dport 80 -j REDIRECT --to-port ${PORTAL_PORT} || true
 

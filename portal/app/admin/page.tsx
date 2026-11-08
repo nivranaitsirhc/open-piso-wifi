@@ -76,7 +76,7 @@ const TAB_TITLES: Record<AdminTab, { title: string; subtitle: string; icon: any 
   },
   machine: {
     title: 'Machine & Hardware Settings',
-    subtitle: 'Raspberry Pi GPIO pin allocation, coin slot timeout window, and admin PIN',
+    subtitle: 'Linux SBC GPIO pin allocation, coin slot timeout window, and admin PIN',
     icon: Wrench,
   },
   branding: {

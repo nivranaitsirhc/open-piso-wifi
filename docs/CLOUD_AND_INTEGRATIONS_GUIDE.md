@@ -168,7 +168,7 @@ Under the **Environment Variables** section in Vercel, add:
 
 ## 4. 🟠 Cloudflare Zero-Trust Tunnel (CGNAT Bypass)
 
-If you want direct, secure web access to your physical Raspberry Pi's local admin console (`http://10.0.0.1:3000/admin`) from anywhere in the world without exposing ports to hackers, use a **Cloudflare Zero-Trust Tunnel (`cloudflared`)**.
+If you want direct, secure web access to your physical Linux SBC's local admin console (`http://10.0.0.1:3000/admin`) from anywhere in the world without exposing ports to hackers, use a **Cloudflare Zero-Trust Tunnel (`cloudflared`)**.
 
 * **100% Free** on Cloudflare's standard plan.
 * **Bypasses CGNAT & ISP NAT** with an encrypted outbound tunnel.
@@ -182,8 +182,8 @@ If you want direct, secure web access to your physical Raspberry Pi's local admi
 4. Choose **Cloudflared**.
 5. Name your tunnel: `pisowifi-pi-gateway`.
 
-### Step 2: Install `cloudflared` on Raspberry Pi
-Cloudflare will provide a single install command for Debian/ARM64. On your Raspberry Pi terminal, run:
+### Step 2: Install `cloudflared` on Linux SBC
+Cloudflare will provide a single install command for Debian/ARM64. On your Linux SBC terminal, run:
 ```bash
 # Example command provided by Cloudflare dashboard:
 curl -L --output cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm64.deb
@@ -217,7 +217,7 @@ sudo cloudflared service install <YOUR_TUNNEL_TOKEN>
          (Outbound Only)            (In-Memory Queue)
                 │                           │
 ┌───────────────┴───────────────────────────┴────────────────────────────┐
-│                    🍓 LOCAL KIOSK (RASPBERRY PI / MINI PC)              │
+│                    🍓 LOCAL KIOSK (Linux SBC / MINI PC)              │
 │                                                                        │
 │   ┌──────────────────────┐             ┌───────────────────────────┐   │
 │   │  Local Admin Portal  │             │   Piso-WiFi Core Daemon   │   │

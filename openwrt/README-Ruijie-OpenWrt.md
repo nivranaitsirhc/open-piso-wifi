@@ -1,6 +1,6 @@
 # 📡 Ruijie RG-EW1200G Pro + OpenWrt Piso Wi-Fi Setup Guide
 
-Complete guide for configuring the **Ruijie Reyee RG-EW1200G Pro** Gigabit AC1200 Dual-Band Router with **OpenWrt (23.05+ / 24.x / 25.12.5+)** paired with a **Raspberry Pi Paywall Controller**.
+Complete guide for configuring the **Ruijie Reyee RG-EW1200G Pro** Gigabit AC1200 Dual-Band Router with **OpenWrt (23.05+ / 24.x / 25.12.5+)** paired with a **Linux SBC Paywall Controller**.
 
 ---
 
@@ -37,7 +37,7 @@ Complete guide for configuring the **Ruijie Reyee RG-EW1200G Pro** Gigabit AC120
                        │
                        ▼
             ┌──────────────────────────────┐
-            │  Raspberry Pi 3B+ / 4B / 5   │
+            │  ARM SBCs   │
             │  Static IP: 192.168.1.240    │
             │                              │
             │  • Next.js Portal  (:3000)   │
@@ -72,11 +72,11 @@ Complete guide for configuring the **Ruijie Reyee RG-EW1200G Pro** Gigabit AC120
 
 ---
 
-## 🍓 Step 2: Configure Static IP on Raspberry Pi (`192.168.1.240`)
+## 🍓 Step 2: Configure Static IP on Linux SBC (`192.168.1.240`)
 
-On your Raspberry Pi, configure a static IP on `eth0`:
+On your Linux SBC, configure a static IP on `eth0`:
 
-### For Raspberry Pi OS (NetworkManager / Bookworm):
+### For Armbian/Debian/Ubuntu (NetworkManager / Bookworm):
 ```bash
 sudo nmcli connection modify "Wired connection 1" \
     ipv4.addresses 192.168.1.240/24 \
@@ -101,7 +101,7 @@ Then restart networking: `sudo systemctl restart dhcpcd`.
 
 ## ⚡ Step 3: Run the 1-Click OpenWrt Automated Setup
 
-From your Raspberry Pi:
+From your Linux SBC:
 
 ```bash
 # Recommended: Run the 1-click router deployer script
@@ -122,11 +122,11 @@ cat openwrt/setup-openwrt.sh | ssh root@192.168.1.1 "cat > /tmp/setup-openwrt.sh
 
 ---
 
-## 🔑 Step 4: Authorize Raspberry Pi SSH Key
+## 🔑 Step 4: Authorize Linux SBC SSH Key
 
-To allow the Raspberry Pi Daemon to command the OpenWrt router without passwords:
+To allow the Linux SBC Daemon to command the OpenWrt router without passwords:
 
-On your Raspberry Pi:
+On your Linux SBC:
 ```bash
 cd /home/pi/piso-wifi/pisowifi-daemon
 bash scripts/setup-ssh-keys.sh
@@ -138,7 +138,7 @@ This generates `~/.ssh/id_rsa` and appends it to `/etc/dropbear/authorized_keys`
 
 ## 🧪 Step 5: Test the Setup
 
-1. **Test SSH from Raspberry Pi:**
+1. **Test SSH from Linux SBC:**
    ```bash
    ssh root@192.168.1.1 "uname -a"
    ```
@@ -182,7 +182,7 @@ This generates `~/.ssh/id_rsa` and appends it to `/etc/dropbear/authorized_keys`
 
 To cleanly remove all OpenPisoWiFi captive portal tables, DHCP hooks, and firewall rules from the OpenWrt router and return it to standard router operation:
 
-### Method A: From Raspberry Pi (Automated via SSH)
+### Method A: From Linux SBC (Automated via SSH)
 ```bash
 bash scripts/uninstall.sh --router
 ```

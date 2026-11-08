@@ -20,7 +20,7 @@ The web portal and administrative control interface for **OpenPisoWifi**, built 
 ### 📊 Admin Dashboard (`/admin` - Default PIN: `1234`)
 - **📈 Revenue Analytics**: Real-time stats on today's revenue, all-time earnings, active sessions, and recent sales logs.
 - **💰 Cash Box Management**: Tracks physical coins in the coin vault, logs collection history with notes, and offers a 1-click empty drawer action.
-- **🛠️ Interactive 40-Pin GPIO Selector**: Visual Raspberry Pi 40-pin header map in the Settings tab to easily assign COIN and INHIBIT pins, with safety conflict validation and instant hot-reloading.
+- **🛠️ Interactive 40-Pin GPIO Selector**: Visual Linux SBC 40-pin header map in the Settings tab to easily assign COIN and INHIBIT pins, with safety conflict validation and instant hot-reloading.
 - **🩺 Hardware & Coin Debugger (`/admin` Hardware Tab)**: Live diagnostic console displaying slot status (Enabled / Blocked), current BCM pin mapping, live pulse log stream, quick Enable/Block/Clear actions, and JSON log export.
 - **⚙️ Dynamic Rates & Branding**: Configure minutes-per-peso rates, customizable time preset cards, announcement ticker banner, portal title, Admin PIN, and GPIO pins.
 - **🎫 Batch Voucher Generator**: Generate batches of prepaid voucher codes with custom durations and expiry days, search codes, filter by status, and open a clean printable voucher sheet.
@@ -33,7 +33,7 @@ The web portal and administrative control interface for **OpenPisoWifi**, built 
   - Manage 2.4GHz & 5GHz Wi-Fi SSIDs, channels, and security directly from the UI.
   - Global bandwidth speed limiter (Upload / Download Mbps) using OpenWrt traffic control (`tc-tiny`).
 - **🩺 System Health & Telemetry**: Live CPU load, RAM utilization, storage space, CPU temperature, and systemd service status monitor.
-- **⚡ Maintenance & Power Controls**: Remote Raspberry Pi reboot, OpenWrt router reboot, firewall auth table flush, and service restarts.
+- **⚡ Maintenance & Power Controls**: Remote Linux SBC reboot, OpenWrt router reboot, firewall auth table flush, and service restarts.
 - **🔄 1-Click System Update**: GitHub version comparison and automated update triggering from the dashboard.
 
 ---
@@ -131,7 +131,7 @@ npm start
 | `/api/admin/router` | `GET` / `POST` | Tests router connection, reboots router, flushes firewall, and applies QoS speed limit |
 | `/api/admin/router/wifi` | `GET` / `POST` | Fetches and updates OpenWrt 2.4GHz & 5GHz Wi-Fi SSIDs, channels, and security |
 | `/api/admin/system/health` | `GET` | Returns CPU load, RAM usage, storage space, CPU temp, and daemon/portal status |
-| `/api/admin/system/power` | `POST` | Triggers system reboot or service restarts on Raspberry Pi |
+| `/api/admin/system/power` | `POST` | Triggers system reboot or service restarts on Linux SBC |
 | `/api/admin/system/update` | `GET` / `POST` | Checks for GitHub updates and triggers 1-click update runner |
 | `/api/admin/system/version`| `GET` | Returns current git commit, branch, and latest release information |
 

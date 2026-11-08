@@ -212,7 +212,7 @@ export function CoinDebugger() {
             <div>
               <CardTitle>Hardware GPIO Status</CardTitle>
               <p className="text-xs text-neutral-600 dark:text-[#b7c6c2] font-semibold">
-                Raspberry Pi physical header & CL-168 coin acceptor connection
+                Linux SBC physical header & CL-168 coin acceptor connection
               </p>
             </div>
           </div>

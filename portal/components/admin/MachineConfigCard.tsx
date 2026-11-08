@@ -83,7 +83,7 @@ export function MachineConfigCard({ initialSettings, onSaveSuccess }: MachineCon
           <div>
             <CardTitle>Machine & Hardware Settings</CardTitle>
             <p className="text-xs text-neutral-600 dark:text-[#b7c6c2]">
-              Configure Raspberry Pi GPIO coin acceptor pins, coin slot active window countdown, and admin access PIN
+              Configure Linux SBC GPIO coin acceptor pins, coin slot active window countdown, and admin access PIN
             </p>
           </div>
         </div>
@@ -111,7 +111,7 @@ export function MachineConfigCard({ initialSettings, onSaveSuccess }: MachineCon
         <div className="p-4 rounded-xl bg-[#f8f6ee] dark:bg-[#111713] border-2 border-black dark:border-[#4a6052] space-y-4 shadow-neo-sm">
           <div className="flex items-center gap-2 text-xs font-black uppercase text-black dark:text-white font-display">
             <Cpu className="w-4 h-4 text-purple-600 dark:text-purple-400" />
-            <span>Raspberry Pi GPIO Pin Allocation (BCM Numbering)</span>
+            <span>Linux SBC GPIO Pin Allocation (BCM Numbering)</span>
           </div>
 
           <GpioPinSelector

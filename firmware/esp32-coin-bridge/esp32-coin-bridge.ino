@@ -6,7 +6,7 @@
  *   High-precision hardware timer interrupt pulse counter for multi-coin
  *   acceptors (CL-168, Allan 1239A, HX-616).
  *   Drives an optional SSD1306 128x64 I2C OLED display and bridges coin pulses
- *   to the OpenPisoWiFi Daemon / Raspberry Pi / PC via USB Serial (115200 baud).
+ *   to the OpenPisoWiFi Daemon / Linux SBC / PC via USB Serial (115200 baud).
  *
  * Pinout:
  *   - COIN_PIN:    GPIO 4  (Connect with 10k/20k voltage divider from 12V/5V pulse)

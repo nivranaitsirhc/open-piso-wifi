@@ -490,7 +490,7 @@ export function RatesConfigCard({ initialSettings, onSaveSuccess, onNavigateTab 
           <div className="mt-4 pt-4 border-t-2 border-black/10 dark:border-white/10 space-y-3">
             <div className="flex items-center gap-2 text-xs font-black uppercase text-black dark:text-white font-display">
               <Cpu className="w-4 h-4 text-purple-600 dark:text-purple-400" />
-              <span>GPIO Hardware Pins — Raspberry Pi (BCM numbering)</span>
+              <span>GPIO Hardware Pins — Linux SBC (BCM numbering)</span>
               <span className="text-[10px] font-bold text-neutral-500 ml-1">used by onoff package · not physical pin numbers</span>
             </div>
             <GpioPinSelector
@@ -643,7 +643,7 @@ export function RatesConfigCard({ initialSettings, onSaveSuccess, onNavigateTab 
             </div>
 
             <div>
-              <label className="block text-xs font-extrabold text-black dark:text-white mb-1">Raspberry Pi Portal IP</label>
+              <label className="block text-xs font-extrabold text-black dark:text-white mb-1">Linux SBC Portal IP</label>
               <Input
                 type="text"
                 value={formData.portal_ip}
@@ -651,7 +651,7 @@ export function RatesConfigCard({ initialSettings, onSaveSuccess, onNavigateTab 
                 placeholder="192.168.1.240"
                 required
               />
-              <p className="mt-1 text-[10px] font-bold text-neutral-600 dark:text-[#b7c6c2]">Static LAN IP of this Raspberry Pi</p>
+              <p className="mt-1 text-[10px] font-bold text-neutral-600 dark:text-[#b7c6c2]">Static LAN IP of this Linux SBC</p>
             </div>
 
             <div>
