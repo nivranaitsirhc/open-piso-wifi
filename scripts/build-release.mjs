@@ -199,7 +199,9 @@ apt-get update -qq
 DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends python3 make g++ ca-certificates >/dev/null
 rm -rf node_modules/better-sqlite3
 npm install --omit=dev --ignore-scripts --no-audit --no-fund --loglevel=error
-npm rebuild better-sqlite3 --build-from-source
+echo "Rebuilding better-sqlite3 native addon for ${releaseArch}..."
+npm rebuild better-sqlite3 --build-from-source --foreground-scripts --loglevel=verbose
+echo "Synchronizing the rebuilt addon into Next.js traced modules..."
 for traced_sqlite in .next/node_modules/better-sqlite3-*; do
   [ -d "$traced_sqlite" ] || continue
   rm -rf "$traced_sqlite"
@@ -215,7 +217,7 @@ done
     `${stagingPortalDir}:/workspace`,
     '-w',
     '/workspace',
-    'node:20-bookworm',
+    'node:20.20.2-bookworm',
     'bash',
     '-lc',
     nativeBuildScript,

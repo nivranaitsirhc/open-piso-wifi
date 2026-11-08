@@ -95,7 +95,7 @@ jobs:
       - name: Setup QEMU for Native Addon Containers
         uses: docker/setup-qemu-action@v3
         with:
-          platforms: arm
+          platforms: all
 
       - name: Build Architecture-Specific Release Bundle
         run: node scripts/build-release.mjs "${{ needs.prepare-release.outputs.tag }}"
