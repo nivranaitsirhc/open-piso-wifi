@@ -647,6 +647,37 @@ export async function setRouterQoS(downloadMbps: number, uploadMbps: number): Pr
   }
 }
 
+export interface ClientQoSRule {
+  macAddress: string;
+  ipAddress?: string;
+  downloadMbps: number;
+  uploadMbps: number;
+  enabled?: boolean;
+  isOverride?: boolean;
+}
+
+export interface QoSConfig {
+  defaultDownloadMbps: number;
+  defaultUploadMbps: number;
+  clients: ClientQoSRule[];
+}
+
+/** Synchronizes the portal's persisted per-client IPv4 QoS policy to the daemon. */
+export async function syncRouterQoS(config: QoSConfig): Promise<{ success: boolean; error?: string }> {
+  try {
+    const res = await fetch(`${DAEMON_URL}/api/router/qos/sync`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(config),
+      signal: AbortSignal.timeout(10000),
+    });
+    const data = await res.json();
+    return { success: res.ok, error: data.error };
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Daemon unreachable' };
+  }
+}
+
 /**
  * Fetches DHCP lease hostnames from OpenWrt router via daemon.
  */

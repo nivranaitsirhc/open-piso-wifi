@@ -253,7 +253,7 @@ echo ""
 # ------------------------------------------------------------------------------
 # 1. DEPENDENCY CHECKS & INSTALLATION
 # ------------------------------------------------------------------------------
-REQUIRED_PACKAGES=(dnsmasq nftables conntrack ethtool)
+REQUIRED_PACKAGES=(dnsmasq nftables conntrack ethtool iproute2)
 MISSING_PACKAGES=()
 
 for pkg in "${REQUIRED_PACKAGES[@]}"; do

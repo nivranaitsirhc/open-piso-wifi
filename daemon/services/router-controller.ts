@@ -1,5 +1,7 @@
 import { Client, type ConnectConfig } from 'ssh2';
 import fs from 'node:fs';
+import path from 'node:path';
+import { isIPv4 } from 'node:net';
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
 
@@ -80,6 +82,24 @@ export interface QoSStatus {
   lanInterface: string;
   wanInterface: string;
   details: string;
+  defaultDownloadMbps?: number;
+  defaultUploadMbps?: number;
+  clientCount?: number;
+}
+
+export interface ClientQoSRule {
+  macAddress: string;
+  ipAddress?: string;
+  downloadMbps: number;
+  uploadMbps: number;
+  enabled?: boolean;
+  isOverride?: boolean;
+}
+
+export interface QoSConfig {
+  defaultDownloadMbps: number;
+  defaultUploadMbps: number;
+  clients: ClientQoSRule[];
 }
 
 export interface DeviceRulesStatus {
@@ -158,6 +178,12 @@ export class RouterController {
   private config: RouterConfig;
   private activeTimers = new Map<string, NodeJS.Timeout>();
   private authorizedMacs = new Set<string>();
+  private qosConfig: QoSConfig = {
+    defaultDownloadMbps: 25,
+    defaultUploadMbps: 10,
+    clients: [],
+  };
+  private readonly qosConfigPath = process.env.ROUTER_QOS_CONFIG_PATH || '/var/lib/openpiso-wifi/qos.json';
 
   constructor(customConfig?: Partial<RouterConfig>) {
     const isLinux = process.platform === 'linux';
@@ -174,6 +200,8 @@ export class RouterController {
       wanInterface: process.env.ROUTER_WAN_INTERFACE || process.env.WAN_IFACE || undefined,
       ...customConfig,
     };
+
+    this.loadQoSConfig();
 
     console.log(`[ROUTER CONTROLLER] Initialized for OpenWrt at ${this.config.host}:${this.config.port} (Mode: ${this.config.mode})`);
   }
@@ -1439,70 +1467,175 @@ nft list set inet piso_portal piso_blacklist 2>/dev/null || nft list set inet fw
     };
   }
 
-  /**
-   * Applies bandwidth rate-limiting / QoS directly to OpenWrt LAN (br-lan) and WAN interface.
-   */
-  public async applySpeedLimit(downloadMbps: number, uploadMbps: number): Promise<{ success: boolean; error?: string }> {
-    const downMbit = Math.max(0, Math.round(downloadMbps));
-    const upMbit = Math.max(0, Math.round(uploadMbps));
+  private loadQoSConfig() {
+    try {
+      if (!fs.existsSync(this.qosConfigPath)) return;
+      const parsed = JSON.parse(fs.readFileSync(this.qosConfigPath, 'utf8')) as Partial<QoSConfig>;
+      this.qosConfig = this.normalizeQoSConfig(parsed);
+    } catch (error) {
+      console.warn('[ROUTER QoS] Could not load saved QoS configuration:', error);
+    }
+  }
 
-    console.log(`[ROUTER QoS] Configuring Speed Limiter: ${downMbit} Mbps Down / ${upMbit} Mbps Up on ${this.config.host}`);
+  private normalizeQoSConfig(input: Partial<QoSConfig>): QoSConfig {
+    const nonNegativeInteger = (value: unknown, fallback: number) => {
+      const parsed = Number(value);
+      return Number.isFinite(parsed) && parsed >= 0 ? Math.round(parsed) : fallback;
+    };
 
-    if (this.config.mode === 'simulation') {
-      return { success: true };
+    const clients = Array.isArray(input.clients)
+      ? input.clients.map((client) => ({
+        macAddress: normalizeMac(String(client?.macAddress || '')),
+        ipAddress: isIPv4(String(client?.ipAddress || '')) ? String(client.ipAddress) : undefined,
+        downloadMbps: nonNegativeInteger(client?.downloadMbps, 0),
+        uploadMbps: nonNegativeInteger(client?.uploadMbps, 0),
+        enabled: client?.enabled !== false,
+        isOverride: client?.isOverride === true,
+      })).filter((client) => client.macAddress.length === 17)
+      : [];
+
+    return {
+      defaultDownloadMbps: nonNegativeInteger(input.defaultDownloadMbps, 25),
+      defaultUploadMbps: nonNegativeInteger(input.defaultUploadMbps, 10),
+      clients,
+    };
+  }
+
+  public getQoSConfig(): QoSConfig {
+    return JSON.parse(JSON.stringify(this.qosConfig)) as QoSConfig;
+  }
+
+  /** Applies independent IPv4 bandwidth classes to every known client. */
+  public async syncQoSConfig(input: Partial<QoSConfig>): Promise<{ success: boolean; error?: string }> {
+    const config = this.normalizeQoSConfig(input);
+    this.qosConfig = config;
+
+    try {
+      fs.mkdirSync(path.dirname(this.qosConfigPath), { recursive: true });
+      fs.writeFileSync(this.qosConfigPath, JSON.stringify(config, null, 2));
+    } catch (error: any) {
+      console.warn('[ROUTER QoS] Could not persist configuration:', error?.message || error);
     }
 
+    return this.applyPerClientQoS(config);
+  }
+
+  public async restoreQoS(): Promise<{ success: boolean; error?: string }> {
+    await this.refreshQoSFromLeases();
+    return this.applyPerClientQoS(this.qosConfig);
+  }
+
+  /** Refreshes IPv4 addresses without changing saved MAC-based overrides. */
+  public async refreshQoSFromLeases(): Promise<void> {
+    if (!this.qosConfig.clients.length && this.qosConfig.defaultDownloadMbps === 0 && this.qosConfig.defaultUploadMbps === 0) return;
+    const leases = await this.getDhcpLeases().catch(() => []);
+    const savedByMac = new Map(this.qosConfig.clients.map((client) => [client.macAddress, client]));
+    const connected = leases.filter((lease) => isIPv4(lease.ip)).map((lease) => {
+      const saved = savedByMac.get(normalizeMac(lease.mac));
+      return {
+        macAddress: normalizeMac(lease.mac),
+        ipAddress: lease.ip,
+        downloadMbps: saved?.isOverride ? saved.downloadMbps : this.qosConfig.defaultDownloadMbps,
+        uploadMbps: saved?.isOverride ? saved.uploadMbps : this.qosConfig.defaultUploadMbps,
+        enabled: saved?.enabled !== false,
+        isOverride: saved?.isOverride === true,
+      };
+    });
+    const offlineOverrides = this.qosConfig.clients.filter((client) => client.isOverride && !connected.some((item) => item.macAddress === client.macAddress)).map((client) => ({ ...client, ipAddress: undefined }));
+    const nextClients = [...connected, ...offlineOverrides];
+    if (JSON.stringify(nextClients) !== JSON.stringify(this.qosConfig.clients)) {
+      this.qosConfig = { ...this.qosConfig, clients: nextClients };
+      try {
+        fs.mkdirSync(path.dirname(this.qosConfigPath), { recursive: true });
+        fs.writeFileSync(this.qosConfigPath, JSON.stringify(this.qosConfig, null, 2));
+      } catch {}
+    }
+  }
+
+  private async applyPerClientQoS(config: QoSConfig): Promise<{ success: boolean; error?: string }> {
+    if (this.config.mode === 'simulation') return { success: true };
+
     const isLocalGateway = this.config.mode === 'local' || this.config.mode === 'local_linux';
-    const lanInterface = (this.config.lanInterface || (isLocalGateway ? 'eth1' : 'br-lan')).replace(/[^a-zA-Z0-9_.:-]/g, '');
+    const lanInterface = (this.config.lanInterface || (isLocalGateway ? '' : 'br-lan')).replace(/[^a-zA-Z0-9_.:-]/g, '');
     const wanInterface = (this.config.wanInterface || '').replace(/[^a-zA-Z0-9_.:-]/g, '');
+    if (isLocalGateway && (!lanInterface || !wanInterface)) {
+      return { success: false, error: 'Local QoS requires ROUTER_LAN_INTERFACE and ROUTER_WAN_INTERFACE' };
+    }
+
+    // The parent is deliberately a very high technical ceiling. The policy is
+    // per-client, so it must not become an aggregate gateway cap.
+    const parentRate = '1000000mbit';
+    const activeClients = config.clients.filter((client) => client.enabled !== false && client.ipAddress && isIPv4(client.ipAddress));
+    const classCommands: string[] = [];
+
+    activeClients.forEach((client, index) => {
+      const classId = 10 + index;
+      const down = client.downloadMbps > 0 ? client.downloadMbps : config.defaultDownloadMbps;
+      const up = client.uploadMbps > 0 ? client.uploadMbps : config.defaultUploadMbps;
+      const downRate = down > 0 ? `${down}mbit` : parentRate;
+      const upRate = up > 0 ? `${up}mbit` : parentRate;
+      const ip = client.ipAddress!;
+
+      classCommands.push(`
+# Client ${client.macAddress} (${ip})
+tc class add dev "$LAN_IF" parent 1:1 classid 1:${classId} htb rate ${downRate} ceil ${downRate}
+tc qdisc add dev "$LAN_IF" parent 1:${classId} handle ${classId}: fq_codel
+tc filter add dev "$LAN_IF" protocol ip parent 1: prio 10 u32 match ip dst ${ip}/32 flowid 1:${classId}
+tc class add dev "$WAN_IF" parent 1:1 classid 1:${classId} htb rate ${upRate} ceil ${upRate}
+tc qdisc add dev "$WAN_IF" parent 1:${classId} handle ${classId}: fq_codel
+tc filter add dev "$WAN_IF" protocol ip parent 1: prio 10 u32 match ip src ${ip}/32 flowid 1:${classId}
+      `.trim());
+    });
+
+    const wanDiscovery = wanInterface
+      ? `WAN_IF='${wanInterface}'`
+      : `WAN_IF=$(uci -q get network.wan.device || uci -q get network.wan.ifname || ip route show default 2>/dev/null | awk '{print $5}' || echo '')`;
     const flowOffloadCommands = isLocalGateway ? '' : `
-# Disable OpenWrt firewall flow offloading so traffic control is not bypassed
+# Disable OpenWrt flow offloading so per-client traffic classes are honored.
 uci set firewall.@defaults[0].flow_offloading='0' 2>/dev/null || true
 uci set firewall.@defaults[0].flow_offloading_hw='0' 2>/dev/null || true
 uci commit firewall 2>/dev/null || true
 `;
-    const wanDiscovery = wanInterface
-      ? `WAN_IF='${wanInterface}'`
-      : `WAN_IF=$(uci -q get network.wan.device || uci -q get network.wan.ifname || ip route show default 2>/dev/null | awk '{print $5}' || echo "wan")`;
-
     const command = `
-${flowOffloadCommands}
-# Discover the active WAN interface
+set -e
+command -v tc >/dev/null 2>&1
+LAN_IF='${lanInterface}'
 ${wanDiscovery}
+[ -n "$LAN_IF" ] && [ -n "$WAN_IF" ]
+${flowOffloadCommands}
 
-# 3. Apply Traffic Control rules
-if [ "${downMbit}" -le 0 ] && [ "${upMbit}" -le 0 ]; then
-  # Unlimited mode: Clear qdiscs
-  tc qdisc del dev '${lanInterface}' root 2>/dev/null || true
-  [ -n "$WAN_IF" ] && tc qdisc del dev "$WAN_IF" root 2>/dev/null || true
-  echo "QOS_CLEARED"
-else
-  # Download Limiting (Egress on br-lan to clients)
-  if [ "${downMbit}" -gt 0 ]; then
-    tc qdisc del dev '${lanInterface}' root 2>/dev/null || true
-    tc qdisc add dev '${lanInterface}' root cake bandwidth ${downMbit}mbit 2>/dev/null || \
-    tc qdisc add dev '${lanInterface}' root handle 1: tbf rate ${downMbit}mbit burst 64kb latency 50ms 2>/dev/null || \
-    tc qdisc add dev '${lanInterface}' root handle 1: fq_codel 2>/dev/null || true
-  fi
-
-  # Upload Limiting (Egress on WAN interface to internet)
-  if [ "${upMbit}" -gt 0 ] && [ -n "$WAN_IF" ]; then
-    tc qdisc del dev "$WAN_IF" root 2>/dev/null || true
-    tc qdisc add dev "$WAN_IF" root cake bandwidth ${upMbit}mbit 2>/dev/null || \
-    tc qdisc add dev "$WAN_IF" root handle 1: tbf rate ${upMbit}mbit burst 64kb latency 50ms 2>/dev/null || true
-  fi
-
-  echo "QOS_APPLIED: DOWN=${downMbit}M UP=${upMbit}M WAN=$WAN_IF"
-fi
+# Remove previous per-client IPv4 classes before rebuilding them.
+tc qdisc del dev "$LAN_IF" root 2>/dev/null || true
+tc qdisc del dev "$WAN_IF" root 2>/dev/null || true
+tc qdisc add dev "$LAN_IF" root handle 1: htb default 999
+tc class add dev "$LAN_IF" parent 1: classid 1:1 htb rate ${parentRate} ceil ${parentRate}
+tc class add dev "$LAN_IF" parent 1:1 classid 1:999 htb rate ${parentRate} ceil ${parentRate}
+tc qdisc add dev "$LAN_IF" parent 1:999 handle 999: fq_codel
+tc qdisc add dev "$WAN_IF" root handle 1: htb default 999
+tc class add dev "$WAN_IF" parent 1: classid 1:1 htb rate ${parentRate} ceil ${parentRate}
+tc class add dev "$WAN_IF" parent 1:1 classid 1:999 htb rate ${parentRate} ceil ${parentRate}
+tc qdisc add dev "$WAN_IF" parent 1:999 handle 999: fq_codel
+${classCommands.join('\n')}
+echo "QOS_CLIENT_CLASSES_APPLIED=${activeClients.length}"
     `.trim();
 
     const res = await this.executeCommand(command);
-
     if (res.code !== 0) {
-      console.warn('[ROUTER QoS WARNING] QoS command returned non-zero code:', res.stderr);
+      console.warn('[ROUTER QoS WARNING] Per-client QoS command failed:', res.stderr);
     }
-
     return { success: res.code === 0, error: res.code === 0 ? undefined : res.stderr };
+  }
+
+  /**
+   * Backward-compatible default QoS endpoint. It now updates the default
+   * per-client policy instead of applying one cap to the entire interface.
+   */
+  public async applySpeedLimit(downloadMbps: number, uploadMbps: number): Promise<{ success: boolean; error?: string }> {
+    return this.syncQoSConfig({
+      ...this.qosConfig,
+      defaultDownloadMbps: Math.max(0, Math.round(downloadMbps)),
+      defaultUploadMbps: Math.max(0, Math.round(uploadMbps)),
+    });
   }
 
   /**
@@ -1516,7 +1649,10 @@ fi
         uploadMbps: 10,
         lanInterface: 'br-lan',
         wanInterface: 'wan',
-        details: 'Simulated CAKE / TBF QoS active on br-lan and wan',
+        details: 'Simulated per-client IPv4 QoS active on br-lan and wan',
+        defaultDownloadMbps: this.qosConfig.defaultDownloadMbps,
+        defaultUploadMbps: this.qosConfig.defaultUploadMbps,
+        clientCount: this.qosConfig.clients.length,
       };
     }
 
@@ -1550,11 +1686,14 @@ echo "$WAN_IF"
 
     return {
       active: hasLanQos,
-      downloadMbps: downMbps,
-      uploadMbps: 0,
+      downloadMbps: this.qosConfig.defaultDownloadMbps || downMbps,
+      uploadMbps: this.qosConfig.defaultUploadMbps,
       lanInterface,
       wanInterface: wanIf,
-      details: output.replace(/=== [A-Z_]+ ===/g, '').trim(),
+      details: `Per-client IPv4 QoS classes: ${this.qosConfig.clients.length}\n${output.replace(/=== [A-Z_]+ ===/g, '').trim()}`,
+      defaultDownloadMbps: this.qosConfig.defaultDownloadMbps,
+      defaultUploadMbps: this.qosConfig.defaultUploadMbps,
+      clientCount: this.qosConfig.clients.length,
     };
   }
 
@@ -1570,7 +1709,7 @@ echo "$WAN_IF"
       ];
     }
 
-    const command = 'cat /tmp/dhcp.leases 2>/dev/null || cat /tmp/dnsmasq.leases 2>/dev/null || cat /var/run/dhcp.leases 2>/dev/null || true';
+    const command = 'cat /tmp/dhcp.leases 2>/dev/null || cat /tmp/dnsmasq.leases 2>/dev/null || cat /var/lib/misc/dnsmasq.leases 2>/dev/null || cat /var/run/dhcp.leases 2>/dev/null || true';
     const res = await this.executeCommand(command);
     const lines = (res.stdout || '').split('\n');
     const leases: Array<{ mac: string; ip: string; hostname?: string }> = [];

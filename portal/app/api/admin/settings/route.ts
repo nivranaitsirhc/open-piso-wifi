@@ -25,6 +25,8 @@ export async function GET() {
       speed_limit: settingsMap.speed_limit || "25mbps",
       custom_down_mbps: settingsMap.custom_down_mbps || "25",
       custom_up_mbps: settingsMap.custom_up_mbps || "10",
+      qos_default_download_mbps: settingsMap.qos_default_download_mbps || "25",
+      qos_default_upload_mbps: settingsMap.qos_default_upload_mbps || "10",
       allow_pause_time: settingsMap.allow_pause_time || "true",
       auto_pause_on_disconnect: settingsMap.auto_pause_on_disconnect || "true",
       auto_pause_grace_seconds: settingsMap.auto_pause_grace_seconds || "60",
@@ -86,6 +88,8 @@ export async function POST(request: NextRequest) {
       "speed_limit",
       "custom_down_mbps",
       "custom_up_mbps",
+      "qos_default_download_mbps",
+      "qos_default_upload_mbps",
       "allow_pause_time",
       "auto_pause_on_disconnect",
       "auto_pause_grace_seconds",
@@ -130,13 +134,24 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Apply Speed Limit directly to OpenWrt Router
-    try {
+    // Apply legacy speed_limit changes only when QoS fields were part of this
+    // request. Saving unrelated portal/rate settings must not reset the
+    // default per-client bandwidth back to 25/10 Mbps.
+    if (
+      body.speed_limit !== undefined ||
+      body.custom_down_mbps !== undefined ||
+      body.custom_up_mbps !== undefined ||
+      body.qos_default_download_mbps !== undefined ||
+      body.qos_default_upload_mbps !== undefined
+    ) try {
       let downMbps = 0;
       let upMbps = 0;
 
-      const speed = body.speed_limit || "25mbps";
-      if (speed === "25mbps") {
+      const speed = body.speed_limit || ((body.custom_down_mbps !== undefined || body.custom_up_mbps !== undefined) ? "custom" : "25mbps");
+      if (body.qos_default_download_mbps !== undefined || body.qos_default_upload_mbps !== undefined) {
+        downMbps = Math.max(0, parseInt(body.qos_default_download_mbps || "25", 10));
+        upMbps = Math.max(0, parseInt(body.qos_default_upload_mbps || "10", 10));
+      } else if (speed === "25mbps") {
         downMbps = 25;
         upMbps = 10;
       } else if (speed === "50mbps") {
@@ -152,6 +167,17 @@ export async function POST(request: NextRequest) {
         downMbps = 0;
         upMbps = 0;
       }
+
+      await prisma.setting.upsert({
+        where: { key: "qos_default_download_mbps" },
+        update: { value: String(downMbps) },
+        create: { key: "qos_default_download_mbps", value: String(downMbps) },
+      });
+      await prisma.setting.upsert({
+        where: { key: "qos_default_upload_mbps" },
+        update: { value: String(upMbps) },
+        create: { key: "qos_default_upload_mbps", value: String(upMbps) },
+      });
 
       await setRouterQoS(downMbps, upMbps);
     } catch (qosErr) {

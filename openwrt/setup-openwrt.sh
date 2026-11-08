@@ -531,36 +531,21 @@ EOF
 chmod +x /etc/init.d/piso-firewall
 /etc/init.d/piso-firewall enable
 
-# Create/update OpenWrt init service for QoS
+# Create/update the legacy QoS init service. QoS is now managed centrally by
+# the daemon as independent per-client IPv4 classes. Leaving this service as a
+# no-op prevents an old aggregate qdisc from overwriting daemon policy during
+# router boot or configuration updates.
 cat << 'EOF' > /etc/init.d/piso-qos
 #!/bin/sh /etc/rc.common
 START=98
 USE_PROCD=0
 
 start() {
-    if [ -f /etc/config/piso_qos ]; then
-        DOWN=$(uci -q get piso_qos.settings.download_mbps || echo 0)
-        UP=$(uci -q get piso_qos.settings.upload_mbps || echo 0)
-        WAN_IF=$(uci -q get piso_qos.settings.wan_if || uci -q get network.wan.device || uci -q get network.wan.ifname || echo "wan")
-
-        if [ "$DOWN" -gt 0 ]; then
-            tc qdisc del dev br-lan root 2>/dev/null || true
-            tc qdisc add dev br-lan root cake bandwidth ${DOWN}mbit 2>/dev/null || \
-            tc qdisc add dev br-lan root handle 1: tbf rate ${DOWN}mbit burst 64kb latency 50ms 2>/dev/null || true
-        fi
-
-        if [ "$UP" -gt 0 ] && [ -n "$WAN_IF" ]; then
-            tc qdisc del dev "$WAN_IF" root 2>/dev/null || true
-            tc qdisc add dev "$WAN_IF" root cake bandwidth ${UP}mbit 2>/dev/null || \
-            tc qdisc add dev "$WAN_IF" root handle 1: tbf rate ${UP}mbit burst 64kb latency 50ms 2>/dev/null || true
-        fi
-    fi
+    return 0
 }
 
 stop() {
-    WAN_IF=$(uci -q get piso_qos.settings.wan_if || uci -q get network.wan.device || uci -q get network.wan.ifname || echo "wan")
-    tc qdisc del dev br-lan root 2>/dev/null || true
-    [ -n "$WAN_IF" ] && tc qdisc del dev "$WAN_IF" root 2>/dev/null || true
+    return 0
 }
 
 restart() {
@@ -569,7 +554,7 @@ restart() {
 }
 EOF
 chmod +x /etc/init.d/piso-qos
-/etc/init.d/piso-qos enable
+/etc/init.d/piso-qos disable 2>/dev/null || true
 
 # Configure Dropbear SSH
 uci set dropbear.@dropbear[0].Port='22'

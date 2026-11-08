@@ -14,7 +14,7 @@ A lightweight, high-performance background daemon for **OpenPisoWifi** running o
 - **📡 Dual-Band Wi-Fi Management**: Reads and updates 2.4GHz & 5GHz SSIDs, channels, and security settings on OpenWrt via UCI commands.
 - **🔍 Real-Time ARP & DHCP Cache Resolution**: Resolves client MAC addresses by querying `/proc/net/arp` and OpenWrt's `/tmp/dhcp.leases`.
 - **🚫 Device Access Control (Whitelist & Blacklist)**: Manages permanent VIP whitelist bypass (`piso_whitelist`) and abusive device blacklisting (`piso_blacklist`).
-- **⚡ Bandwidth Speed Limiter (QoS)**: Applies global or per-network download/upload bandwidth throttles via OpenWrt's `tc-tiny` (Traffic Control Token Bucket Filter).
+- **⚡ Per-Client IPv4 QoS**: Applies independent default and per-client download/upload limits with Linux `tc` locally or through OpenWrt SSH. IPv6 traffic is intentionally unsupported.
 - **🔄 Session Synchronization & Maintenance**: Bulk-syncs active sessions after reboots, flushes auth tables, and triggers remote router reboots.
 - **🧪 Cross-Platform Simulation Mode**: Automatically detects non-Linux environments (Windows/macOS) and switches to simulation mode without crashing, enabling rapid UI and API development without physical hardware.
 
@@ -132,7 +132,9 @@ bun run dev
 | `/api/router/dhcp` | `GET` | — | Returns active DHCP leases array from `/tmp/dhcp.leases` on OpenWrt |
 | `/api/router/wifi` | `GET` | — | Fetches 2.4GHz and 5GHz wireless SSIDs, channels, and security settings |
 | `/api/router/wifi` | `POST` | Wireless settings object | Applies new SSIDs, channels, and encryption to OpenWrt radios |
-| `/api/router/qos` | `POST` | `{ downloadMbps: number, uploadMbps: number }` | Applies bandwidth speed limits on OpenWrt using `tc-tiny` |
+| `/api/router/qos` | `POST` | `{ downloadMbps: number, uploadMbps: number }` | Updates the default per-client IPv4 bandwidth policy |
+| `/api/router/qos/config` | `GET` | — | Returns persisted default and per-client IPv4 QoS configuration |
+| `/api/router/qos/sync` | `POST` | `{ defaultDownloadMbps, defaultUploadMbps, clients[] }` | Rebuilds independent IPv4 `tc` classes locally or on OpenWrt |
 | `/api/router/reboot` | `POST` | — | Gracefully reboots the OpenWrt router via SSH |
 
 ### 🚫 Device Access Control Endpoints

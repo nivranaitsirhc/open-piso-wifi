@@ -198,6 +198,23 @@ async function ensureSchemaColumns() {
     `).catch(() => {});
     await prisma.$queryRawUnsafe(`CREATE INDEX IF NOT EXISTS "LoyaltyClaim_sessionCode_idx" ON "LoyaltyClaim"("sessionCode");`).catch(() => {});
     await prisma.$queryRawUnsafe(`CREATE INDEX IF NOT EXISTS "LoyaltyClaim_createdAt_idx" ON "LoyaltyClaim"("createdAt");`).catch(() => {});
+
+    // Per-client IPv4 bandwidth overrides. This is intentionally created at
+    // runtime as installations use a template database rather than migration
+    // directories during OTA updates.
+    await prisma.$queryRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "ClientBandwidthLimit" (
+        "id" TEXT PRIMARY KEY NOT NULL,
+        "macAddress" TEXT NOT NULL UNIQUE,
+        "downloadMbps" INTEGER NOT NULL,
+        "uploadMbps" INTEGER NOT NULL,
+        "enabled" BOOLEAN NOT NULL DEFAULT 1,
+        "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+    `).catch(() => {});
+    await prisma.$queryRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "ClientBandwidthLimit_macAddress_key" ON "ClientBandwidthLimit"("macAddress");`).catch(() => {});
+    await prisma.$queryRawUnsafe(`CREATE INDEX IF NOT EXISTS "ClientBandwidthLimit_macAddress_idx" ON "ClientBandwidthLimit"("macAddress");`).catch(() => {});
   } catch (err) {
     // Suppress non-fatal schema migration errors
   }

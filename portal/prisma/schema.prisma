@@ -108,6 +108,20 @@ model DeviceRule {
   @@index([type])
 }
 
+// Optional IPv4-only per-client bandwidth override. Clients without a record
+// use the default per-client QoS values stored in Setting.
+model ClientBandwidthLimit {
+  id           String   @id @default(cuid())
+  macAddress   String   @unique
+  downloadMbps Int
+  uploadMbps   Int
+  enabled      Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([macAddress])
+}
+
 // Customer Loyalty Streaks (daily streak reward system keyed by Session Code)
 model LoyaltyStreak {
   id                String    @id @default(cuid())

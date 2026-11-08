@@ -307,6 +307,20 @@ setInterval(async () => {
 // Initialize the OpenWrt Router Controller (defaults to 192.168.1.1)
 const router = new RouterController();
 
+// Restore saved per-client IPv4 QoS after networking has had time to bring up
+// the configured WAN/LAN interfaces. The portal can later resynchronize with
+// fresh DHCP lease addresses.
+setTimeout(() => {
+  router.restoreQoS().then((result) => {
+    if (!result.success) {
+      console.warn('[ROUTER QoS] Startup restore failed:', result.error);
+    }
+  }).catch((error) => console.warn('[ROUTER QoS] Startup restore failed:', error));
+}, 5000);
+setInterval(() => {
+  router.restoreQoS().catch((error) => console.warn('[ROUTER QoS] Lease refresh failed:', error));
+}, 60000);
+
 // Inhibit Pin Mode:
 // - Default HIGH / Built-in Inhibit (inhibitActiveHigh = true): Idle/Blocked = HIGH (3.3V), Enabled/Accept = LOW (0V).
 // - Default LOW / Relay Mode (inhibitActiveHigh = false): Idle/Blocked = LOW (0V), Enabled/Accept = HIGH (3.3V).
@@ -1258,6 +1272,24 @@ app.post('/api/router/qos', async (req: Request<{}, {}, { downloadMbps: number; 
     res.json(result);
   } catch (error: any) {
     res.status(500).json({ error: error.message || 'Failed to apply speed limit' });
+  }
+});
+
+// Per-client IPv4 QoS configuration. The default values are applied to every
+// known client independently; client entries replace those defaults.
+app.get('/api/router/qos/config', async (_req: Request, res: Response) => {
+  res.json(router.getQoSConfig());
+});
+
+app.post('/api/router/qos/sync', async (req: Request, res: Response) => {
+  try {
+    const result = await router.syncQoSConfig(req.body || {});
+    if (!result.success) {
+      return res.status(500).json({ error: result.error || 'Failed to apply per-client QoS' });
+    }
+    res.json({ success: true, config: router.getQoSConfig() });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'Failed to synchronize per-client QoS' });
   }
 });
 

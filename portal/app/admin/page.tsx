@@ -28,6 +28,7 @@ import { AdminLoginModal } from '@/components/admin/AdminLoginModal';
 import { AdminSidebar, AdminTab } from '@/components/admin/AdminSidebar';
 import { StatsOverview } from '@/components/admin/StatsOverview';
 import { RatesPricingCard } from '@/components/admin/RatesPricingCard';
+import { GatewayQoSCard } from '@/components/admin/GatewayQoSCard';
 import { LoyaltyConfigCard } from '@/components/admin/LoyaltyConfigCard';
 import { MachineConfigCard } from '@/components/admin/MachineConfigCard';
 import { PortalUiCard } from '@/components/admin/PortalUiCard';
@@ -398,12 +399,15 @@ export default function AdminPage() {
 
             {/* Tab: Rates & Pricing */}
             {activeTab === 'rates' && settingsData && (
-              <RatesPricingCard
-                initialSettings={settingsData}
-                onSaveSuccess={() => {
-                  mutateSettings();
-                }}
-              />
+              <div className="space-y-6">
+                <RatesPricingCard
+                  initialSettings={settingsData}
+                  onSaveSuccess={() => {
+                    mutateSettings();
+                  }}
+                />
+                <GatewayQoSCard />
+              </div>
             )}
 
             {/* Tab: Customer Loyalty & Streaks */}

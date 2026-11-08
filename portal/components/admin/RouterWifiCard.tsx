@@ -16,8 +16,6 @@ import {
   Sparkles,
   Router,
   Activity,
-  Gauge,
-  Zap,
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -35,9 +33,6 @@ interface RouterWifiCardProps {
     router_ssh_user?: string;
     router_ssh_key_path?: string;
     router_mode?: string;
-    speed_limit?: string;
-    custom_down_mbps?: string;
-    custom_up_mbps?: string;
   };
   onSaveSuccess?: () => void;
 }
@@ -61,22 +56,6 @@ export function RouterWifiCard({ initialSettings, onSaveSuccess }: RouterWifiCar
   const [isSavingGateway, setIsSavingGateway] = useState(false);
   const [gatewayMsg, setGatewayMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  // -------------------------------------------------------------
-  // 2. BANDWIDTH SPEED LIMITER & QOS (SQM) STATE
-  // -------------------------------------------------------------
-  const { data: qosStatus, mutate: mutateQoS } = useSWR('/api/admin/router/qos', fetcher, {
-    refreshInterval: 6000,
-  });
-
-  const [qosData, setQosData] = useState({
-    speed_limit: initialSettings?.speed_limit || '25mbps',
-    custom_down_mbps: initialSettings?.custom_down_mbps || '25',
-    custom_up_mbps: initialSettings?.custom_up_mbps || '10',
-  });
-
-  const [isApplyingQoS, setIsApplyingQoS] = useState(false);
-  const [qosMsg, setQosMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-
   // Sync with incoming initialSettings if loaded asynchronously
   useEffect(() => {
     if (initialSettings) {
@@ -88,11 +67,6 @@ export function RouterWifiCard({ initialSettings, onSaveSuccess }: RouterWifiCar
         router_ssh_user: initialSettings.router_ssh_user ?? prev.router_ssh_user,
         router_ssh_key_path: initialSettings.router_ssh_key_path ?? prev.router_ssh_key_path,
         router_mode: initialSettings.router_mode ?? prev.router_mode,
-      }));
-      setQosData((prev) => ({
-        speed_limit: initialSettings.speed_limit ?? prev.speed_limit,
-        custom_down_mbps: initialSettings.custom_down_mbps ?? prev.custom_down_mbps,
-        custom_up_mbps: initialSettings.custom_up_mbps ?? prev.custom_up_mbps,
       }));
     }
   }, [initialSettings]);
@@ -160,61 +134,6 @@ export function RouterWifiCard({ initialSettings, onSaveSuccess }: RouterWifiCar
       setGatewayMsg({ type: 'error', text: err.message || 'Error saving gateway configuration' });
     } finally {
       setIsSavingGateway(false);
-    }
-  };
-
-  // Handle Apply Bandwidth Speed Limiter (QoS SQM)
-  const handleApplyQoS = async () => {
-    setIsApplyingQoS(true);
-    setQosMsg(null);
-
-    try {
-      let downMbps = 0;
-      let upMbps = 0;
-      if (qosData.speed_limit === '25mbps') {
-        downMbps = 25;
-        upMbps = 10;
-      } else if (qosData.speed_limit === '50mbps') {
-        downMbps = 50;
-        upMbps = 20;
-      } else if (qosData.speed_limit === '100mbps') {
-        downMbps = 100;
-        upMbps = 50;
-      } else if (qosData.speed_limit === 'custom') {
-        downMbps = parseInt(qosData.custom_down_mbps || '25', 10);
-        upMbps = parseInt(qosData.custom_up_mbps || '10', 10);
-      } else if (qosData.speed_limit === 'unlimited') {
-        downMbps = 0;
-        upMbps = 0;
-      }
-
-      // 1. Apply live to router SQM daemon
-      const resQos = await fetch('/api/admin/router/qos', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ downloadMbps: downMbps, uploadMbps: upMbps }),
-      });
-      const qosResData = await resQos.json();
-      if (!resQos.ok) throw new Error(qosResData.error || 'Failed to apply speed limit to router');
-
-      // 2. Persist speed limit preference in settings DB
-      await fetch('/api/admin/settings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          speed_limit: qosData.speed_limit,
-          custom_down_mbps: qosData.custom_down_mbps,
-          custom_up_mbps: qosData.custom_up_mbps,
-        }),
-      });
-
-      setQosMsg({ type: 'success', text: qosResData.message || 'Bandwidth speed limit applied successfully to OpenWrt!' });
-      mutateQoS();
-      if (onSaveSuccess) onSaveSuccess();
-    } catch (err: any) {
-      setQosMsg({ type: 'error', text: err.message || 'Error applying bandwidth speed limit' });
-    } finally {
-      setIsApplyingQoS(false);
     }
   };
 
@@ -512,122 +431,6 @@ export function RouterWifiCard({ initialSettings, onSaveSuccess }: RouterWifiCar
             </Button>
           </div>
         </form>
-      </Card>
-
-      {/* ======================================================== */}
-      {/* CARD 2: BANDWIDTH SPEED LIMITER & QOS (OPENWRT SQM)     */}
-      {/* ======================================================== */}
-      <Card className="border-2 border-black dark:border-[#4a6052] shadow-neo space-y-4">
-        <CardHeader className="flex flex-row items-center justify-between pb-2 flex-wrap gap-2">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-[#4ade80] text-black border-2 border-black shadow-neo-sm">
-              <Gauge className="w-5 h-5 stroke-[2.5]" />
-            </div>
-            <div>
-              <CardTitle>Bandwidth Speed Limiter & QoS (OpenWrt SQM)</CardTitle>
-              <p className="text-xs text-neutral-600 dark:text-[#b7c6c2]">
-                Active traffic shaping and bandwidth throttling per client via OpenWrt Smart Queue Management
-              </p>
-            </div>
-          </div>
-
-          {qosStatus && (
-            <span
-              className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border-2 border-black shadow-neo-sm flex items-center gap-1 shrink-0 ${qosStatus.enabled ? 'bg-[#4ade80] text-black' : 'bg-[#ffe17c] text-black'
-                }`}
-            >
-              <span className="w-1.5 h-1.5 rounded-full bg-black" />
-              {qosStatus.enabled
-                ? `QoS Active (${qosStatus.downMbps}M / ${qosStatus.upMbps}M)`
-                : 'QoS Inactive'}
-            </span>
-          )}
-        </CardHeader>
-
-        {qosMsg && (
-          <div
-            className={`flex items-center gap-2 p-3 rounded-xl border-2 border-black shadow-neo-sm text-xs font-bold ${qosMsg.type === 'success' ? 'bg-[#4ade80] text-black' : 'bg-[#ff5f57] text-black'
-              }`}
-          >
-            {qosMsg.type === 'success' ? (
-              <CheckCircle2 className="w-4 h-4 shrink-0 text-black" />
-            ) : (
-              <AlertCircle className="w-4 h-4 shrink-0 text-black" />
-            )}
-            <span>{qosMsg.text}</span>
-          </div>
-        )}
-
-        <div className="space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-            <div className="flex-1">
-              <select
-                value={qosData.speed_limit}
-                onChange={(e) => setQosData({ ...qosData, speed_limit: e.target.value })}
-                className="w-full bg-white dark:bg-[#1c241f] border-2 border-black rounded-xl px-3 py-2.5 text-xs text-black dark:text-white font-bold focus:outline-none focus:ring-2 focus:ring-black shadow-neo-sm"
-              >
-                <option value="25mbps">⚡ 25 Mbps Down / 10 Mbps Up (Recommended for 15+ Clients)</option>
-                <option value="50mbps">🚀 50 Mbps Down / 20 Mbps Up (Medium Traffic Hotspot)</option>
-                <option value="100mbps">💥 100 Mbps Down / 50 Mbps Up (High Speed Fiber)</option>
-                <option value="unlimited">🌐 Unlimited (No Hardware Throttling)</option>
-                <option value="custom">⚙️ Custom Manual Limit...</option>
-              </select>
-            </div>
-
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={handleApplyQoS}
-              isLoading={isApplyingQoS}
-              className="gap-1.5 px-4 font-black text-xs shrink-0 shadow-neo-sm"
-              title="Apply bandwidth limits to router without full page save"
-            >
-              <Zap className="w-3.5 h-3.5 text-black dark:text-[#ffe17c]" />
-              <span>Apply to Router Now</span>
-            </Button>
-          </div>
-
-          {qosData.speed_limit === 'custom' && (
-            <div className="p-3.5 rounded-xl bg-[#f8f6ee] dark:bg-[#111713] border-2 border-black dark:border-[#4a6052] grid grid-cols-1 sm:grid-cols-2 gap-3 shadow-neo-sm">
-              <div>
-                <label className="block text-xs font-black text-black dark:text-white mb-1">
-                  Custom Download Limit (Mbps)
-                </label>
-                <Input
-                  type="number"
-                  min={1}
-                  max={1000}
-                  value={qosData.custom_down_mbps}
-                  onChange={(e) => setQosData({ ...qosData, custom_down_mbps: e.target.value })}
-                  placeholder="e.g. 25"
-                  required
-                />
-                <p className="mt-1 text-[10px] font-bold text-neutral-600 dark:text-[#b7c6c2]">
-                  Download speed cap per client
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-xs font-black text-black dark:text-white mb-1">
-                  Custom Upload Limit (Mbps)
-                </label>
-                <Input
-                  type="number"
-                  min={1}
-                  max={1000}
-                  value={qosData.custom_up_mbps}
-                  onChange={(e) => setQosData({ ...qosData, custom_up_mbps: e.target.value })}
-                  placeholder="e.g. 10"
-                  required
-                />
-                <p className="mt-1 text-[10px] font-bold text-neutral-600 dark:text-[#b7c6c2]">
-                  Upload speed cap per client
-                </p>
-              </div>
-            </div>
-          )}
-        </div>
       </Card>
 
       {/* ======================================================== */}
