@@ -415,6 +415,9 @@ $SUDO_CMD chmod 666 "$TARGET_PORTAL/dev.db"* 2>/dev/null || true
 
 if [ -d "$TARGET_PORTAL" ] && [ -f "$TARGET_PORTAL/package.json" ]; then
     echo -e "--> Installing Portal dependencies and rebuilding the native SQLite adapter in ${TARGET_PORTAL}..."
+    # Next.js standalone tracing may omit better-sqlite3 build files such as
+    # binding.gyp. Remove only that traced package so npm restores its source.
+    rm -rf "$TARGET_PORTAL/node_modules/better-sqlite3"
     (cd "$TARGET_PORTAL" && npm install --omit=dev --ignore-scripts --loglevel=error)
     (cd "$TARGET_PORTAL" && npm rebuild better-sqlite3 --build-from-source)
     $SUDO_CMD chown -R "${CURRENT_USER}:${CURRENT_USER}" "$TARGET_PORTAL" 2>/dev/null || true

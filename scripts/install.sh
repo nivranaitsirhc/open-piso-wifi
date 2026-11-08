@@ -680,6 +680,9 @@ sudo chmod 666 "$PORTAL_DIR/prisma/dev.db"* 2>/dev/null || true
 # locally because its native addon must match the target CPU (including ARMv7).
 echo -e "--> Installing Portal dependencies and rebuilding the native SQLite adapter in ${PORTAL_DIR}..."
 if [ -d "$PORTAL_DIR" ] && [ -f "$PORTAL_DIR/package.json" ]; then
+    # Next.js standalone tracing may omit better-sqlite3 build files such as
+    # binding.gyp. Remove only that traced package so npm restores its source.
+    rm -rf "$PORTAL_DIR/node_modules/better-sqlite3"
     (cd "$PORTAL_DIR" && npm install --omit=dev --ignore-scripts --loglevel=error)
     (cd "$PORTAL_DIR" && npm rebuild better-sqlite3 --build-from-source)
 fi
