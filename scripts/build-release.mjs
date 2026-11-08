@@ -59,7 +59,7 @@ const buildEnv = {
   DATABASE_URL: process.env.DATABASE_URL || 'file:./dev.db',
 };
 
-console.log('  • Generating Prisma client with Linux ARM64 & Debian engines...');
+console.log('  • Generating Prisma client with Debian, ARM64, and ARMv7 engines...');
 execSync('npx prisma generate', { cwd: portalDir, env: buildEnv, stdio: 'inherit' });
 
 console.log('  • Preparing template database (prisma/dev.db.template)...');
