@@ -30,7 +30,7 @@ fi
 # Updates always target the production installation, not the checkout used to
 # invoke this script.
 ROOT_DIR="${OPENPISOWIFI_INSTALL_DIR:-/opt/open-piso-wifi}"
-GITHUB_REPO="haliknihudas666/open-piso-wifi"
+GITHUB_REPO="nivranaitsirhc/open-piso-wifi"
 RELEASE_TARBALL="piso-wifi-release.tar.gz"
 
 # ------------------------------------------------------------------------------
@@ -412,6 +412,13 @@ $SUDO_CMD chown -R "${CURRENT_USER}:${CURRENT_USER}" "$TARGET_PORTAL" 2>/dev/nul
 $SUDO_CMD chmod 777 "$TARGET_PORTAL/prisma" 2>/dev/null || true
 $SUDO_CMD chmod 666 "$TARGET_PORTAL/prisma/dev.db"* 2>/dev/null || true
 $SUDO_CMD chmod 666 "$TARGET_PORTAL/dev.db"* 2>/dev/null || true
+
+if [ -d "$TARGET_PORTAL" ] && [ -f "$TARGET_PORTAL/package.json" ]; then
+    echo -e "--> Building Portal SQLite adapter for the target architecture in ${TARGET_PORTAL}..."
+    (cd "$TARGET_PORTAL" && npm install --omit=dev --loglevel=error)
+    (cd "$TARGET_PORTAL" && npm rebuild better-sqlite3 --build-from-source)
+    $SUDO_CMD chown -R "${CURRENT_USER}:${CURRENT_USER}" "$TARGET_PORTAL" 2>/dev/null || true
+fi
 
 # Verify and install Hardware Daemon production dependencies
 if [ -d "$TARGET_DAEMON" ] && [ -f "$TARGET_DAEMON/package.json" ]; then

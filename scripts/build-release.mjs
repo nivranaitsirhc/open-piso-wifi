@@ -108,14 +108,23 @@ if (fs.existsSync(path.join(standaloneDir, 'portal'))) {
 console.log('  • Copying Next.js standalone runtime (dereferencing symlinks)...');
 fs.cpSync(sourceStandaloneAppDir, stagingPortalDir, { recursive: true, dereference: true });
 
+// Keep the production dependency manifest with the standalone runtime. The
+// installer uses it to rebuild better-sqlite3 for the target CPU.
+for (const manifest of ['package.json', 'package-lock.json']) {
+  const sourceManifest = path.join(portalDir, manifest);
+  if (fs.existsSync(sourceManifest)) {
+    fs.copyFileSync(sourceManifest, path.join(stagingPortalDir, manifest));
+  }
+}
+
 // Also ensure root node_modules from standalone is copied if it was at parent level
 const standaloneRootNodeModules = path.join(standaloneDir, 'node_modules');
 if (fs.existsSync(standaloneRootNodeModules) && !fs.existsSync(path.join(stagingPortalDir, 'node_modules'))) {
   fs.cpSync(standaloneRootNodeModules, path.join(stagingPortalDir, 'node_modules'), { recursive: true, dereference: true });
 }
 
-// Explicitly ensure @prisma and .prisma runtime with multi-arch engines are present
-console.log('  • Bundling multi-architecture Prisma client & engines...');
+// Explicitly ensure the Prisma client runtime is present.
+console.log('  • Bundling Rust-free Prisma client & SQLite adapter...');
 const srcPrismaClient = path.join(portalDir, 'node_modules', '@prisma');
 const destPrismaClient = path.join(stagingPortalDir, 'node_modules', '@prisma');
 if (fs.existsSync(srcPrismaClient)) {

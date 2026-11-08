@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import { PrismaBetterSqlite3 } from '@prisma/adapter-better-sqlite3';
 
 import path from 'path';
 import fs from 'fs';
@@ -54,6 +55,10 @@ function getResolvedDatabaseUrl(): string {
 
 const resolvedDbUrl = getResolvedDatabaseUrl();
 process.env.DATABASE_URL = resolvedDbUrl;
+const sqliteAdapter = new PrismaBetterSqlite3(
+  { url: resolvedDbUrl.split('?')[0] },
+  { timestampFormat: 'unixepoch-ms' },
+);
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
@@ -64,11 +69,7 @@ const globalForPrisma = globalThis as unknown as {
 export const prisma =
   globalForPrisma.prisma ??
   new PrismaClient({
-    datasources: {
-      db: {
-        url: resolvedDbUrl,
-      },
-    },
+    adapter: sqliteAdapter,
     log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
   });
 

@@ -36,7 +36,7 @@ ROOT_DIR="${OPENPISOWIFI_INSTALL_DIR:-/opt/open-piso-wifi}"
 mkdir -p "$ROOT_DIR"
 
 # GitHub Repository Details
-GITHUB_REPO="haliknihudas666/open-piso-wifi"
+GITHUB_REPO="nivranaitsirhc/open-piso-wifi"
 RELEASE_TARBALL="piso-wifi-release.tar.gz"
 
 CLI_TOKEN=""
@@ -675,7 +675,15 @@ sudo chown -R ${CURRENT_USER}:${CURRENT_USER} "$PORTAL_DIR"
 sudo chmod 777 "$PORTAL_DIR/prisma" 2>/dev/null || true
 sudo chmod 666 "$PORTAL_DIR/prisma/dev.db"* 2>/dev/null || true
 
-# Install minimal production daemon dependencies (only 3 packages for hardware GPIO & SSH: express, onoff, ssh2)
+# Install production dependencies on-device. This is required for
+# better-sqlite3, whose native addon must match the target CPU (including ARMv7).
+echo -e "--> Building Portal SQLite adapter for the target architecture in ${PORTAL_DIR}..."
+if [ -d "$PORTAL_DIR" ] && [ -f "$PORTAL_DIR/package.json" ]; then
+    (cd "$PORTAL_DIR" && npm install --omit=dev --loglevel=error)
+    (cd "$PORTAL_DIR" && npm rebuild better-sqlite3 --build-from-source)
+fi
+
+# Install minimal production daemon dependencies (express, onoff, ssh2)
 echo -e "--> Verifying Hardware Daemon production dependencies in ${DAEMON_DIR}..."
 if [ -d "$DAEMON_DIR" ] && [ -f "$DAEMON_DIR/package.json" ]; then
     (cd "$DAEMON_DIR" && npm install --omit=dev --loglevel=error)
