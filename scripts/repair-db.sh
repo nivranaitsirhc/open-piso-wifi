@@ -17,8 +17,7 @@ YELLOW='\033[1;33m'
 PURPLE='\033[0;35m'
 NC='\033[0m'
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT_DIR="$(dirname "$SCRIPT_DIR")"
+ROOT_DIR="${OPENPISOWIFI_INSTALL_DIR:-/opt/open-piso-wifi}"
 PORTAL_DIR="$ROOT_DIR/portal"
 [ ! -d "$PORTAL_DIR" ] && [ -d "$ROOT_DIR/pisowifi-portal" ] && PORTAL_DIR="$ROOT_DIR/pisowifi-portal"
 PRISMA_DIR="$PORTAL_DIR/prisma"

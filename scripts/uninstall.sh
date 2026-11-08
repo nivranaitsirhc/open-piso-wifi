@@ -25,28 +25,7 @@ PURPLE='\033[0;35m'
 NC='\033[0m'
 
 CURRENT_USER="${SUDO_USER:-$(logname 2>/dev/null || whoami)}"
-if [ -n "${BASH_SOURCE[0]}" ] && [ -f "${BASH_SOURCE[0]}" ]; then
-    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    if [ "$(basename "$SCRIPT_DIR")" = "scripts" ]; then
-        ROOT_DIR="$(dirname "$SCRIPT_DIR")"
-    else
-        ROOT_DIR="$SCRIPT_DIR"
-    fi
-else
-    if [ -f "$PWD/package.json" ] && grep -q '"open-piso-wifi"' "$PWD/package.json" 2>/dev/null; then
-        ROOT_DIR="$PWD"
-    elif [ -d "$PWD/open-piso-wifi" ]; then
-        ROOT_DIR="$PWD/open-piso-wifi"
-    elif [ -n "$SUDO_USER" ] && [ -d "/home/$SUDO_USER/open-piso-wifi" ]; then
-        ROOT_DIR="/home/$SUDO_USER/open-piso-wifi"
-    elif [ -n "$SUDO_USER" ] && [ -d "/home/$SUDO_USER/daemon" ]; then
-        ROOT_DIR="/home/$SUDO_USER"
-    elif [ -n "$SUDO_USER" ] && [ -d "/home/$SUDO_USER" ]; then
-        ROOT_DIR="/home/$SUDO_USER/open-piso-wifi"
-    else
-        ROOT_DIR="/opt/open-piso-wifi"
-    fi
-fi
+ROOT_DIR="${OPENPISOWIFI_INSTALL_DIR:-/opt/open-piso-wifi}"
 
 PORTAL_DIR="$ROOT_DIR/portal"
 [ ! -d "$PORTAL_DIR" ] && [ -d "$ROOT_DIR/pisowifi-portal" ] && PORTAL_DIR="$ROOT_DIR/pisowifi-portal"

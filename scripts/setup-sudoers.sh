@@ -16,8 +16,7 @@ PURPLE='\033[0;35m'
 NC='\033[0m'
 
 CURRENT_USER="${SUDO_USER:-$(logname 2>/dev/null || whoami)}"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT_DIR="$(dirname "$SCRIPT_DIR")"
+ROOT_DIR="${OPENPISOWIFI_INSTALL_DIR:-/opt/open-piso-wifi}"
 
 echo -e "${CYAN}==============================================================${NC}"
 echo -e "${GREEN}🔑 Configuring Passwordless Sudo for OpenPisoWifi...${NC}"

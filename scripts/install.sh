@@ -23,26 +23,16 @@ CURRENT_USER="${SUDO_USER:-$(logname 2>/dev/null || whoami)}"
 if [ -n "${BASH_SOURCE[0]}" ] && [ -f "${BASH_SOURCE[0]}" ]; then
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     if [ "$(basename "$SCRIPT_DIR")" = "scripts" ]; then
-        ROOT_DIR="$(dirname "$SCRIPT_DIR")"
+        SOURCE_ROOT="$(dirname "$SCRIPT_DIR")"
     else
-        ROOT_DIR="$SCRIPT_DIR"
+        SOURCE_ROOT="$SCRIPT_DIR"
     fi
 else
-    # Invoked via curl ... | sudo bash (stdin pipe)
-    if [ -f "$PWD/package.json" ] && grep -q '"open-piso-wifi"' "$PWD/package.json" 2>/dev/null; then
-        ROOT_DIR="$PWD"
-    elif [ -d "$PWD/open-piso-wifi" ]; then
-        ROOT_DIR="$PWD/open-piso-wifi"
-    elif [ -n "$SUDO_USER" ] && [ -d "/home/$SUDO_USER/open-piso-wifi" ]; then
-        ROOT_DIR="/home/$SUDO_USER/open-piso-wifi"
-    elif [ -n "$SUDO_USER" ] && [ -d "/home/$SUDO_USER/daemon" ]; then
-        ROOT_DIR="/home/$SUDO_USER"
-    elif [ -n "$SUDO_USER" ] && [ -d "/home/$SUDO_USER" ]; then
-        ROOT_DIR="/home/$SUDO_USER/open-piso-wifi"
-    else
-        ROOT_DIR="/opt/open-piso-wifi"
-    fi
+    SOURCE_ROOT="$PWD"
 fi
+# Production files always live here; the launch directory only supplies an
+# optional local dist/ bundle and never determines the install location.
+ROOT_DIR="${OPENPISOWIFI_INSTALL_DIR:-/opt/open-piso-wifi}"
 mkdir -p "$ROOT_DIR"
 
 # GitHub Repository Details
@@ -502,9 +492,9 @@ if [ "$ALREADY_EXTRACTED" = false ]; then
     rm -f "$TEMP_TARBALL"
 
     # Check for local tarball in dist/ first
-    if [ -f "$ROOT_DIR/dist/${RELEASE_TARBALL}" ]; then
-        echo -e "--> Using local release package: $ROOT_DIR/dist/${RELEASE_TARBALL}"
-        cp "$ROOT_DIR/dist/${RELEASE_TARBALL}" "$TEMP_TARBALL"
+    if [ -f "$SOURCE_ROOT/dist/${RELEASE_TARBALL}" ]; then
+        echo -e "--> Using local release package: $SOURCE_ROOT/dist/${RELEASE_TARBALL}"
+        cp "$SOURCE_ROOT/dist/${RELEASE_TARBALL}" "$TEMP_TARBALL"
     else
         DOWNLOAD_SUCCESS=false
         API_URL="https://api.github.com/repos/${GITHUB_REPO}/releases/latest"
