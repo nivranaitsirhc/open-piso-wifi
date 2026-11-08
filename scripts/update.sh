@@ -31,7 +31,7 @@ fi
 # Updates always target the production installation, not the checkout used to
 # invoke this script.
 ROOT_DIR="${OPENPISOWIFI_INSTALL_DIR:-/opt/open-piso-wifi}"
-GITHUB_REPO="nivranaitsirhc/open-piso-wifi"
+GITHUB_REPO="${GITHUB_REPO:-}"
 
 detect_release_arch() {
     local machine_arch="${OPENPISOWIFI_ARCH:-$(uname -m)}"
@@ -79,6 +79,15 @@ PORTAL_DIR="$ROOT_DIR/portal"
 [ ! -d "$PORTAL_DIR" ] && [ -d "$ROOT_DIR/pisowifi-portal" ] && PORTAL_DIR="$ROOT_DIR/pisowifi-portal"
 DAEMON_DIR="$ROOT_DIR/daemon"
 [ ! -d "$DAEMON_DIR" ] && [ -d "$ROOT_DIR/pisowifi-daemon" ] && DAEMON_DIR="$ROOT_DIR/pisowifi-daemon"
+
+# Keep the portal release checker and this updater on the same repository.
+# The portal .env is the installation-level configuration already loaded by
+# the systemd service. An environment variable can override it for recovery
+# or administrative use.
+if [ -z "$GITHUB_REPO" ] && [ -f "$PORTAL_DIR/.env" ]; then
+    GITHUB_REPO=$(grep -E '^GITHUB_REPO=' "$PORTAL_DIR/.env" | head -n1 | cut -d'=' -f2- | tr -d '\"'\'' ' || echo "")
+fi
+GITHUB_REPO="${GITHUB_REPO:-nivranaitsirhc/open-piso-wifi}"
 
 GITHUB_TOKEN="${CLI_TOKEN:-${GITHUB_TOKEN:-}}"
 if [ -z "$GITHUB_TOKEN" ] && [ -f "$PORTAL_DIR/.env" ]; then

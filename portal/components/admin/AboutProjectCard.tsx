@@ -19,6 +19,9 @@ import {
 import { Card, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { DEFAULT_GITHUB_REPO } from '@/lib/repository';
+
+const GITHUB_REPO_URL = `https://github.com/${DEFAULT_GITHUB_REPO}`;
 
 function GithubIcon({ className = "w-5 h-5" }: { className?: string }) {
   return (
@@ -138,7 +141,7 @@ export function AboutProjectCard() {
             </p>
             <div className="pt-2">
               <a
-                href="https://github.com/haliknihudas666/open-piso-wifi"
+                href={GITHUB_REPO_URL}
                 target="_blank"
                 rel="noreferrer"
                 className="w-full py-2.5 px-4 bg-black text-white hover:bg-neutral-800 font-extrabold text-xs neo-border rounded-xl shadow-neo-sm btn-press flex items-center justify-center gap-2"
@@ -165,7 +168,7 @@ export function AboutProjectCard() {
             </p>
             <div className="pt-2">
               <a
-                href="https://github.com/haliknihudas666/open-piso-wifi/issues"
+                href={`${GITHUB_REPO_URL}/issues`}
                 target="_blank"
                 rel="noreferrer"
                 className="w-full py-2.5 px-4 bg-rose-500 hover:bg-rose-600 text-white font-extrabold text-xs neo-border rounded-xl shadow-neo-sm btn-press flex items-center justify-center gap-2"

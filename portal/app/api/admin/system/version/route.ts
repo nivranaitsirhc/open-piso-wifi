@@ -4,11 +4,11 @@ import { promisify } from 'node:util';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { GITHUB_REPO } from '@/lib/repository';
 
 const execAsync = promisify(exec);
 export const dynamic = 'force-dynamic';
 
-const GITHUB_REPO = 'haliknihudas666/open-piso-wifi';
 const CACHE_TTL_MS = 3 * 60 * 1000; // 3 minutes cache to avoid GitHub API rate limits
 
 interface RemoteVersionCache {

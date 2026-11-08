@@ -36,8 +36,9 @@ fi
 ROOT_DIR="${OPENPISOWIFI_INSTALL_DIR:-/opt/open-piso-wifi}"
 mkdir -p "$ROOT_DIR"
 
-# GitHub Repository Details
-GITHUB_REPO="nivranaitsirhc/open-piso-wifi"
+# GitHub Repository Details. Override with GITHUB_REPO or
+# OPENPISOWIFI_GITHUB_REPO when installing a fork.
+GITHUB_REPO="${GITHUB_REPO:-${OPENPISOWIFI_GITHUB_REPO:-nivranaitsirhc/open-piso-wifi}}"
 
 detect_release_arch() {
     local machine_arch="${OPENPISOWIFI_ARCH:-$(uname -m)}"
@@ -666,6 +667,7 @@ PORTAL_PORT="${PORTAL_PORT}"
 ROUTER_IP="${ROUTER_IP}"
 DAEMON_URL="http://127.0.0.1:${DAEMON_PORT}"
 ADMIN_PIN="${ADMIN_PIN}"
+GITHUB_REPO="${GITHUB_REPO}"
 GITHUB_TOKEN="${GITHUB_TOKEN}"
 EOF
 
