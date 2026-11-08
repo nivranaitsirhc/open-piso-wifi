@@ -46,8 +46,8 @@ fi
 mkdir -p "$ROOT_DIR"
 
 # GitHub Repository Details
-GITHUB_REPO="haliknihudas666/open-piso-wifi"
-RELEASE_TARBALL="piso-wifi-release.tar.gz"
+GITHUB_REPO="nivranaitsirhc/open-piso-wifi"
+RELEASE_TARBALL="opw.tar.gz"
 
 CLI_TOKEN=""
 CLI_PORTAL_IP=""

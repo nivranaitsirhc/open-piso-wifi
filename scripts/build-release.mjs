@@ -16,7 +16,7 @@ const __dirname = path.dirname(__filename);
 const ROOT_DIR = path.resolve(__dirname, '..');
 const DIST_DIR = path.join(ROOT_DIR, 'dist');
 const STAGING_DIR = path.join(DIST_DIR, 'release');
-const TARBALL_PATH = path.join(DIST_DIR, 'piso-wifi-release.tar.gz');
+const TARBALL_PATH = path.join(DIST_DIR, 'opw.tar.gz');
 
 console.log('==============================================================');
 console.log('🚀 Building OpenPisoWiFi Pre-Built Production Release Bundle');
@@ -49,8 +49,8 @@ if (fs.existsSync(DIST_DIR)) {
 }
 fs.mkdirSync(STAGING_DIR, { recursive: true });
 
-// 3. Build Web Portal (Prisma Multi-Arch & Next.js Standalone)
-console.log('\n[2/6] Building Web Portal (Next.js Standalone & Prisma multi-arch)...');
+// 3. Build Web Portal (Rust-free Prisma & Next.js Standalone)
+console.log('\n[2/6] Building Web Portal (Next.js Standalone & Rust-free Prisma)...');
 const portalDir = fs.existsSync(path.join(ROOT_DIR, 'portal'))
   ? path.join(ROOT_DIR, 'portal')
   : path.join(ROOT_DIR, 'pisowifi-portal');
@@ -59,7 +59,7 @@ const buildEnv = {
   DATABASE_URL: process.env.DATABASE_URL || 'file:./dev.db',
 };
 
-console.log('  • Generating Prisma client with Linux ARM64 & Debian engines...');
+console.log('  • Generating Rust-free Prisma client in GitHub Actions...');
 execSync('npx prisma generate', { cwd: portalDir, env: buildEnv, stdio: 'inherit' });
 
 console.log('  • Preparing template database (prisma/dev.db.template)...');
