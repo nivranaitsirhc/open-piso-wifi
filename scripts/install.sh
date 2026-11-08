@@ -685,6 +685,15 @@ if [ -d "$PORTAL_DIR" ] && [ -f "$PORTAL_DIR/package.json" ]; then
     rm -rf "$PORTAL_DIR/node_modules/better-sqlite3"
     (cd "$PORTAL_DIR" && npm install --omit=dev --ignore-scripts --loglevel=error)
     (cd "$PORTAL_DIR" && npm rebuild better-sqlite3 --build-from-source)
+
+    # Next.js may also load a hashed traced copy from .next/node_modules.
+    # Replace every traced copy with the ARM-built package so Node does not
+    # load the x64 .node binary bundled by GitHub Actions.
+    for traced_sqlite in "$PORTAL_DIR"/.next/node_modules/better-sqlite3-*; do
+        [ -d "$traced_sqlite" ] || continue
+        rm -rf "$traced_sqlite"
+        cp -rf "$PORTAL_DIR/node_modules/better-sqlite3" "$traced_sqlite"
+    done
 fi
 
 # Install minimal production daemon dependencies (express, onoff, ssh2)

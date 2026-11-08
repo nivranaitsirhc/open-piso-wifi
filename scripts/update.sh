@@ -420,6 +420,12 @@ if [ -d "$TARGET_PORTAL" ] && [ -f "$TARGET_PORTAL/package.json" ]; then
     rm -rf "$TARGET_PORTAL/node_modules/better-sqlite3"
     (cd "$TARGET_PORTAL" && npm install --omit=dev --ignore-scripts --loglevel=error)
     (cd "$TARGET_PORTAL" && npm rebuild better-sqlite3 --build-from-source)
+    # Replace Next.js hashed traced copies with the ARM-built package.
+    for traced_sqlite in "$TARGET_PORTAL"/.next/node_modules/better-sqlite3-*; do
+        [ -d "$traced_sqlite" ] || continue
+        rm -rf "$traced_sqlite"
+        cp -rf "$TARGET_PORTAL/node_modules/better-sqlite3" "$traced_sqlite"
+    done
     $SUDO_CMD chown -R "${CURRENT_USER}:${CURRENT_USER}" "$TARGET_PORTAL" 2>/dev/null || true
 fi
 
