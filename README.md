@@ -328,7 +328,7 @@ flowchart LR
     Dev[💻 Developer] -->|npm run version:bump| Bump[🏷️ Auto Versioning]
     Bump -->|git push origin main| Repo[🐙 GitHub Repository]
     Repo -->|Trigger Workflow| Actions[⚙️ GitHub Actions CI]
-    Actions -->|Standalone Next.js & Bun Bundle| Dist[📦 opw.tar.gz]
+    Actions -->|Architecture-specific bundles| Dist[📦 opw-linux-{armv7,arm64,amd64}.tar.gz]
     Dist -->|Publish| Release[🚀 GitHub Releases]
     Release -->|1-Click OTA| Machines[🍓 Raspberry Pi Fleet]
 ```
@@ -338,7 +338,7 @@ To build the release archive locally without GitHub Actions:
 ```bash
 npm run build:release
 ```
-*Creates `dist/opw.tar.gz` in under 40 seconds.*
+*Creates architecture-specific archives such as `dist/opw-linux-armv7.tar.gz`.*
 
 ---
 

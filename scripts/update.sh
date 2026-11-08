@@ -31,7 +31,22 @@ fi
 # invoke this script.
 ROOT_DIR="${OPENPISOWIFI_INSTALL_DIR:-/opt/open-piso-wifi}"
 GITHUB_REPO="nivranaitsirhc/open-piso-wifi"
-RELEASE_TARBALL="opw.tar.gz"
+
+detect_release_arch() {
+    local machine_arch="${OPENPISOWIFI_ARCH:-$(uname -m)}"
+    case "$machine_arch" in
+        armv7l|armv7|armhf) echo "armv7" ;;
+        aarch64|arm64|armv8*) echo "arm64" ;;
+        x86_64|amd64) echo "amd64" ;;
+        *)
+            echo -e "${RED}Unsupported CPU architecture: ${machine_arch}. Set OPENPISOWIFI_ARCH to armv7, arm64, or amd64.${NC}" >&2
+            return 1
+            ;;
+    esac
+}
+
+RELEASE_ARCH="$(detect_release_arch)"
+RELEASE_TARBALL="opw-linux-${RELEASE_ARCH}.tar.gz"
 
 # ------------------------------------------------------------------------------
 # ARGUMENT PARSING & GITHUB TOKEN DISCOVERY
@@ -414,18 +429,19 @@ $SUDO_CMD chmod 666 "$TARGET_PORTAL/prisma/dev.db"* 2>/dev/null || true
 $SUDO_CMD chmod 666 "$TARGET_PORTAL/dev.db"* 2>/dev/null || true
 
 if [ -d "$TARGET_PORTAL" ] && [ -f "$TARGET_PORTAL/package.json" ]; then
-    echo -e "--> Installing Portal dependencies and rebuilding the native SQLite adapter in ${TARGET_PORTAL}..."
-    # Next.js standalone tracing may omit better-sqlite3 build files such as
-    # binding.gyp. Remove only that traced package so npm restores its source.
-    rm -rf "$TARGET_PORTAL/node_modules/better-sqlite3"
-    (cd "$TARGET_PORTAL" && npm install --omit=dev --ignore-scripts --loglevel=error)
-    (cd "$TARGET_PORTAL" && npm rebuild better-sqlite3 --build-from-source)
-    # Replace Next.js hashed traced copies with the ARM-built package.
-    for traced_sqlite in "$TARGET_PORTAL"/.next/node_modules/better-sqlite3-*; do
-        [ -d "$traced_sqlite" ] || continue
-        rm -rf "$traced_sqlite"
-        cp -rf "$TARGET_PORTAL/node_modules/better-sqlite3" "$traced_sqlite"
+    echo -e "--> Verifying prebuilt Portal SQLite adapter in ${TARGET_PORTAL}..."
+    SQLITE_NATIVE=""
+    for native_root in "$TARGET_PORTAL/node_modules" "$TARGET_PORTAL/.next/node_modules"; do
+        if [ -d "$native_root" ]; then
+            SQLITE_NATIVE=$(find "$native_root" -type f -name better_sqlite3.node -print -quit 2>/dev/null || true)
+            [ -n "$SQLITE_NATIVE" ] && break
+        fi
     done
+    if [ -z "$SQLITE_NATIVE" ]; then
+        echo -e "${RED}❌ The ${RELEASE_TARBALL} archive does not contain a prebuilt better-sqlite3 addon.${NC}" >&2
+        exit 1
+    fi
+    echo -e "${GREEN}✓ Prebuilt SQLite addon found: ${SQLITE_NATIVE}${NC}"
     $SUDO_CMD chown -R "${CURRENT_USER}:${CURRENT_USER}" "$TARGET_PORTAL" 2>/dev/null || true
 fi
 

@@ -17,9 +17,11 @@ permissions:
   contents: write
 
 jobs:
-  build-release:
-    name: Package Pre-Built Release
+  prepare-release:
+    name: Prepare Release Metadata
     runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.vars.outputs.TAG }}
 
     steps:
       - name: Checkout Code
@@ -31,16 +33,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-
-      - name: Install Dependencies
-        run: |
-          if [ -d "portal" ]; then
-            cd portal && npm install
-            cd ../daemon && npm install --ignore-scripts
-          else
-            cd pisowifi-portal && npm install
-            cd ../pisowifi-daemon && npm install --ignore-scripts
-          fi
 
       - name: Determine Release Tag
         id: vars
@@ -64,19 +56,93 @@ jobs:
             git push origin "$TAG" || true
           fi
 
-      - name: Build Pre-Compiled Release Bundle
+  build-release:
+    name: Build ${{ matrix.arch }} Release
+    needs: prepare-release
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: armv7
+            platform: linux/arm/v7
+          - arch: arm64
+            platform: linux/arm64
+          - arch: amd64
+            platform: linux/amd64
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js 20 LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install JavaScript Dependencies
         run: |
-          node scripts/build-release.mjs "${{ steps.vars.outputs.TAG }}"
+          if [ -d "portal" ]; then
+            cd portal && npm install
+            cd ../daemon && npm install --ignore-scripts
+          else
+            cd pisowifi-portal && npm install
+            cd ../pisowifi-daemon && npm install --ignore-scripts
+          fi
+
+      - name: Setup QEMU for Native Addon Containers
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm
+
+      - name: Build Architecture-Specific Release Bundle
+        run: node scripts/build-release.mjs "${{ needs.prepare-release.outputs.tag }}"
         env:
           DATABASE_URL: "file:./prisma/dev.db"
+          RELEASE_ARCH: ${{ matrix.arch }}
+          TARGET_PLATFORM: ${{ matrix.platform }}
+
+      - name: Upload Architecture Release Asset
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.arch }}
+          path: dist/opw-linux-${{ matrix.arch }}.tar.gz
+          if-no-files-found: error
+
+      - name: Upload Release Metadata
+        if: matrix.arch == 'amd64'
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-metadata
+          path: dist/version.json
+          if-no-files-found: error
+
+  publish-release:
+    name: Publish GitHub Release
+    needs:
+      - prepare-release
+      - build-release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download Release Assets
+        uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: dist
+          merge-multiple: true
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.vars.outputs.TAG }}
-          name: OpenPisoWiFi ${{ steps.vars.outputs.TAG }}
+          tag_name: ${{ needs.prepare-release.outputs.tag }}
+          name: OpenPisoWiFi ${{ needs.prepare-release.outputs.tag }}
           files: |
-            dist/opw.tar.gz
+            dist/opw-linux-armv7.tar.gz
+            dist/opw-linux-arm64.tar.gz
+            dist/opw-linux-amd64.tar.gz
             dist/version.json
           generate_release_notes: true
           make_latest: true

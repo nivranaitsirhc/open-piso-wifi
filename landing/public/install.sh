@@ -23,31 +23,36 @@ CURRENT_USER="${SUDO_USER:-$(logname 2>/dev/null || whoami)}"
 if [ -n "${BASH_SOURCE[0]}" ] && [ -f "${BASH_SOURCE[0]}" ]; then
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     if [ "$(basename "$SCRIPT_DIR")" = "scripts" ]; then
-        ROOT_DIR="$(dirname "$SCRIPT_DIR")"
+        SOURCE_ROOT="$(dirname "$SCRIPT_DIR")"
     else
-        ROOT_DIR="$SCRIPT_DIR"
+        SOURCE_ROOT="$SCRIPT_DIR"
     fi
 else
-    # Invoked via curl ... | sudo bash (stdin pipe)
-    if [ -f "$PWD/package.json" ] && grep -q '"open-piso-wifi"' "$PWD/package.json" 2>/dev/null; then
-        ROOT_DIR="$PWD"
-    elif [ -d "$PWD/open-piso-wifi" ]; then
-        ROOT_DIR="$PWD/open-piso-wifi"
-    elif [ -n "$SUDO_USER" ] && [ -d "/home/$SUDO_USER/open-piso-wifi" ]; then
-        ROOT_DIR="/home/$SUDO_USER/open-piso-wifi"
-    elif [ -n "$SUDO_USER" ] && [ -d "/home/$SUDO_USER/daemon" ]; then
-        ROOT_DIR="/home/$SUDO_USER"
-    elif [ -n "$SUDO_USER" ] && [ -d "/home/$SUDO_USER" ]; then
-        ROOT_DIR="/home/$SUDO_USER/open-piso-wifi"
-    else
-        ROOT_DIR="/opt/open-piso-wifi"
-    fi
+    SOURCE_ROOT="$PWD"
 fi
+# Production files always live here; the launch directory only supplies an
+# optional local dist/ bundle and never determines the install location.
+ROOT_DIR="${OPENPISOWIFI_INSTALL_DIR:-/opt/open-piso-wifi}"
 mkdir -p "$ROOT_DIR"
 
 # GitHub Repository Details
 GITHUB_REPO="nivranaitsirhc/open-piso-wifi"
-RELEASE_TARBALL="opw.tar.gz"
+
+detect_release_arch() {
+    local machine_arch="${OPENPISOWIFI_ARCH:-$(uname -m)}"
+    case "$machine_arch" in
+        armv7l|armv7|armhf) echo "armv7" ;;
+        aarch64|arm64|armv8*) echo "arm64" ;;
+        x86_64|amd64) echo "amd64" ;;
+        *)
+            echo -e "${RED}Unsupported CPU architecture: ${machine_arch}. Set OPENPISOWIFI_ARCH to armv7, arm64, or amd64.${NC}" >&2
+            return 1
+            ;;
+    esac
+}
+
+RELEASE_ARCH="$(detect_release_arch)"
+RELEASE_TARBALL="opw-linux-${RELEASE_ARCH}.tar.gz"
 
 CLI_TOKEN=""
 CLI_PORTAL_IP=""
@@ -104,6 +109,29 @@ fi
 DYNAMIC_HOST_IP=$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="src") print $(i+1)}' || true)
 [ -z "$DYNAMIC_HOST_IP" ] && DYNAMIC_HOST_IP=$(hostname -I 2>/dev/null | awk '{print $1}' || true)
 DYNAMIC_GATEWAY_IP=$(ip -4 route show default 2>/dev/null | awk '/default/ {for(i=1;i<=NF;i++) if($i=="via") print $(i+1)}' || true)
+
+# Prefer the first physical non-USB Ethernet interface for the portal LAN.
+# Armbian/Ubuntu may use names such as end0 or enx..., so never assume eth0.
+detect_portal_interface() {
+    local iface bus
+    local -a ethernet_ifaces=() builtin_ifaces=()
+    for iface in /sys/class/net/*; do
+        [ -e "$iface" ] || continue
+        iface="$(basename "$iface")"
+        [ "$iface" = "lo" ] && continue
+        [ -e "/sys/class/net/$iface/device" ] || continue
+        [ "$(cat "/sys/class/net/$iface/type" 2>/dev/null || echo 0)" = "1" ] || continue
+        ethernet_ifaces+=("$iface")
+        bus="$(udevadm info --query=property --path="/sys/class/net/$iface" 2>/dev/null | awk -F= '$1=="ID_BUS" {print $2; exit}')"
+        [ "$bus" != "usb" ] && builtin_ifaces+=("$iface")
+    done
+    if [ ${#builtin_ifaces[@]} -gt 0 ]; then
+        printf '%s\n' "${builtin_ifaces[0]}"
+    elif [ ${#ethernet_ifaces[@]} -gt 0 ]; then
+        printf '%s\n' "${ethernet_ifaces[0]}"
+    fi
+}
+PORTAL_IFACE="$(detect_portal_interface)"
 
 DEFAULT_PORTAL_IP="${DYNAMIC_HOST_IP:-}"
 DEFAULT_ROUTER_IP="${DYNAMIC_GATEWAY_IP:-}"
@@ -403,7 +431,7 @@ echo ""
 # ------------------------------------------------------------------------------
 echo -e "${PURPLE}[1/6] Installing minimal system runtime packages...${NC}"
 sudo apt-get update -y
-sudo DEBIAN_FRONTEND=noninteractive apt-get install -y curl tar sqlite3 openssh-client iptables-persistent netfilter-persistent build-essential python3 python3-gpiozero python3-lgpio gpiod
+sudo DEBIAN_FRONTEND=noninteractive apt-get install -y curl tar sqlite3 openssh-client iptables-persistent netfilter-persistent build-essential python3 python3-gpiozero python3-libgpiod gpiod
 
 # Check Node.js version (Requires Node.js 20+)
 NEED_NODE_INSTALL=false
@@ -432,7 +460,10 @@ echo ""
 echo -e "${PURPLE}[2/6] Configuring Static LAN IP (${PORTAL_IP})...${NC}"
 
 if command -v nmcli >/dev/null 2>&1 && systemctl is-active --quiet NetworkManager; then
-    ETH_CONN=$(nmcli -t -f NAME,TYPE connection show | grep ':802-3-ethernet' | head -n1 | cut -d':' -f1 || echo "")
+    ETH_CONN=""
+    if [ -n "$PORTAL_IFACE" ]; then
+        ETH_CONN=$(nmcli -g GENERAL.CONNECTION device show "$PORTAL_IFACE" 2>/dev/null | sed '/^--$/d' | head -n1 || true)
+    fi
     if [ -n "$ETH_CONN" ]; then
         echo -e "--> Setting static IP on NetworkManager connection: ${ETH_CONN}"
         sudo nmcli connection modify "$ETH_CONN" \
@@ -448,7 +479,7 @@ elif [ -f /etc/dhcpcd.conf ]; then
         sudo tee -a /etc/dhcpcd.conf > /dev/null << EOF
 
 # OpenPisoWifi Static IP Configuration
-interface eth0
+interface ${PORTAL_IFACE}
 static ip_address=${PORTAL_IP}/24
 static routers=${ROUTER_IP}
 static domain_name_servers=1.1.1.1 8.8.8.8
@@ -476,13 +507,14 @@ if [ "$ALREADY_EXTRACTED" = false ]; then
     rm -f "$TEMP_TARBALL"
 
     # Check for local tarball in dist/ first
-    if [ -f "$ROOT_DIR/dist/${RELEASE_TARBALL}" ]; then
-        echo -e "--> Using local release package: $ROOT_DIR/dist/${RELEASE_TARBALL}"
-        cp "$ROOT_DIR/dist/${RELEASE_TARBALL}" "$TEMP_TARBALL"
+    if [ -f "$SOURCE_ROOT/dist/${RELEASE_TARBALL}" ]; then
+        echo -e "--> Using local release package: $SOURCE_ROOT/dist/${RELEASE_TARBALL}"
+        cp "$SOURCE_ROOT/dist/${RELEASE_TARBALL}" "$TEMP_TARBALL"
     else
         DOWNLOAD_SUCCESS=false
         API_URL="https://api.github.com/repos/${GITHUB_REPO}/releases/latest"
         ASSET_ID=""
+        RELEASE_TAG=""
 
         fetch_api() {
             local token="$1"
@@ -528,6 +560,14 @@ if [ "$ALREADY_EXTRACTED" = false ]; then
         fi
 
         if [ -n "$JSON" ]; then
+            RELEASE_TAG=$(echo "$JSON" | node -e '
+                let d=""; process.stdin.on("data", c=>d+=c); process.stdin.on("end", ()=>{
+                    try { const j=JSON.parse(d); if(j.tag_name) console.log(j.tag_name); } catch(e){}
+                });
+            ' 2>/dev/null || echo "")
+            if [ -z "$RELEASE_TAG" ]; then
+                RELEASE_TAG=$(echo "$JSON" | grep -o '"tag_name": *"[^"]*"' | head -n1 | cut -d'"' -f4 || echo "")
+            fi
             if command -v node >/dev/null 2>&1; then
                 ASSET_ID=$(echo "$JSON" | node -e '
                     let d=""; process.stdin.on("data", c=>d+=c); process.stdin.on("end", ()=>{
@@ -551,6 +591,17 @@ if [ "$ALREADY_EXTRACTED" = false ]; then
         echo -e "--> Attempting direct download from GitHub Releases..."
         if curl -fSL --progress-bar "https://github.com/${GITHUB_REPO}/releases/latest/download/${RELEASE_TARBALL}" -o "$TEMP_TARBALL" 2>/dev/null; then
             DOWNLOAD_SUCCESS=true
+        fi
+
+        # GitHub's tag-specific release URL is the reliable fallback when the
+        # latest alias is unavailable or the release is not marked latest.
+        if [ "$DOWNLOAD_SUCCESS" = false ] && [ -n "$RELEASE_TAG" ]; then
+            echo -e "--> Retrying tagged release download (${RELEASE_TAG})..."
+            if curl -fSL --progress-bar \
+                "https://github.com/${GITHUB_REPO}/releases/download/${RELEASE_TAG}/${RELEASE_TARBALL}" \
+                -o "$TEMP_TARBALL" 2>/dev/null; then
+                DOWNLOAD_SUCCESS=true
+            fi
         fi
 
         # 2. Authenticated asset download fallback (For private repositories or forks)
@@ -639,7 +690,25 @@ sudo chown -R ${CURRENT_USER}:${CURRENT_USER} "$PORTAL_DIR"
 sudo chmod 777 "$PORTAL_DIR/prisma" 2>/dev/null || true
 sudo chmod 666 "$PORTAL_DIR/prisma/dev.db"* 2>/dev/null || true
 
-# Install minimal production daemon dependencies (only 3 packages for hardware GPIO & SSH: express, onoff, ssh2)
+# The selected architecture-specific release already contains the native
+# better-sqlite3 addon built by GitHub Actions. Do not rebuild on the device.
+echo -e "--> Verifying prebuilt Portal SQLite adapter in ${PORTAL_DIR}..."
+if [ -d "$PORTAL_DIR" ] && [ -f "$PORTAL_DIR/package.json" ]; then
+    SQLITE_NATIVE=""
+    for native_root in "$PORTAL_DIR/node_modules" "$PORTAL_DIR/.next/node_modules"; do
+        if [ -d "$native_root" ]; then
+            SQLITE_NATIVE=$(find "$native_root" -type f -name better_sqlite3.node -print -quit 2>/dev/null || true)
+            [ -n "$SQLITE_NATIVE" ] && break
+        fi
+    done
+    if [ -z "$SQLITE_NATIVE" ]; then
+        echo -e "${RED}❌ The ${RELEASE_TARBALL} archive does not contain a prebuilt better-sqlite3 addon.${NC}" >&2
+        exit 1
+    fi
+    echo -e "${GREEN}✓ Prebuilt SQLite addon found: ${SQLITE_NATIVE}${NC}"
+fi
+
+# Install minimal production daemon dependencies (express, onoff, ssh2)
 echo -e "--> Verifying Hardware Daemon production dependencies in ${DAEMON_DIR}..."
 if [ -d "$DAEMON_DIR" ] && [ -f "$DAEMON_DIR/package.json" ]; then
     (cd "$DAEMON_DIR" && npm install --omit=dev --loglevel=error)

@@ -8,7 +8,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { execSync } from 'node:child_process';
+import { execFileSync, execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -16,7 +16,10 @@ const __dirname = path.dirname(__filename);
 const ROOT_DIR = path.resolve(__dirname, '..');
 const DIST_DIR = path.join(ROOT_DIR, 'dist');
 const STAGING_DIR = path.join(DIST_DIR, 'release');
-const TARBALL_PATH = path.join(DIST_DIR, 'opw.tar.gz');
+const releaseArch = (process.env.RELEASE_ARCH || process.argv[3] || '').trim().toLowerCase();
+const targetPlatform = (process.env.TARGET_PLATFORM || '').trim();
+const archiveName = releaseArch ? `opw-linux-${releaseArch}.tar.gz` : 'opw.tar.gz';
+const TARBALL_PATH = path.join(DIST_DIR, archiveName);
 
 console.log('==============================================================');
 console.log('🚀 Building OpenPisoWiFi Pre-Built Production Release Bundle');
@@ -24,6 +27,7 @@ console.log('==============================================================');
 console.log(`• Root Directory:    ${ROOT_DIR}`);
 console.log(`• Staging Directory: ${STAGING_DIR}`);
 console.log(`• Target Archive:    ${TARBALL_PATH}`);
+if (releaseArch) console.log(`• Release Architecture: ${releaseArch}`);
 console.log('');
 
 const startTime = Date.now();
@@ -109,7 +113,7 @@ console.log('  • Copying Next.js standalone runtime (dereferencing symlinks)..
 fs.cpSync(sourceStandaloneAppDir, stagingPortalDir, { recursive: true, dereference: true });
 
 // Keep the production dependency manifest with the standalone runtime. The
-// installer uses it to rebuild better-sqlite3 for the target CPU.
+// installer selects the matching architecture-specific archive.
 for (const manifest of ['package.json', 'package-lock.json']) {
   const sourceManifest = path.join(portalDir, manifest);
   if (fs.existsSync(sourceManifest)) {
@@ -179,6 +183,57 @@ if (fs.existsSync(templateDbPath)) {
 
 // CRITICAL: Ensure release tarball NEVER contains live database files (dev.db, dev.db-wal, dev.db-shm).
 // Only dev.db.template is allowed, so client updates never overwrite user settings, vouchers, or whitelist/blacklist.
+
+// Build the native SQLite addon inside the target architecture container. The
+// JavaScript/Next.js build remains on the GitHub runner, while this step makes
+// the archive self-contained for ARMv7, ARM64, or AMD64 deployment.
+if (targetPlatform) {
+  if (!releaseArch) {
+    throw new Error('TARGET_PLATFORM requires RELEASE_ARCH');
+  }
+
+  console.log(`  • Building better-sqlite3 for ${releaseArch} (${targetPlatform})...`);
+  const nativeBuildScript = `
+set -e
+apt-get update -qq
+DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends python3 make g++ ca-certificates >/dev/null
+rm -rf node_modules/better-sqlite3
+npm install --omit=dev --ignore-scripts --no-audit --no-fund --loglevel=error
+npm rebuild better-sqlite3 --build-from-source
+for traced_sqlite in .next/node_modules/better-sqlite3-*; do
+  [ -d "$traced_sqlite" ] || continue
+  rm -rf "$traced_sqlite"
+  cp -rf node_modules/better-sqlite3 "$traced_sqlite"
+done
+`;
+
+  execFileSync('docker', [
+    'run',
+    '--rm',
+    `--platform=${targetPlatform}`,
+    '-v',
+    `${stagingPortalDir}:/workspace`,
+    '-w',
+    '/workspace',
+    'node:20-bookworm',
+    'bash',
+    '-lc',
+    nativeBuildScript,
+  ], { stdio: 'inherit' });
+
+  // npm install --ignore-scripts may prune generated Prisma output as an
+  // extraneous directory. Restore the client generated on the GitHub runner;
+  // this step must not run Prisma generation inside the target container.
+  if (fs.existsSync(srcPrismaClient)) {
+    fs.rmSync(destPrismaClient, { recursive: true, force: true });
+    fs.cpSync(srcPrismaClient, destPrismaClient, { recursive: true, dereference: true });
+  }
+  if (fs.existsSync(srcDotPrisma)) {
+    fs.rmSync(destDotPrisma, { recursive: true, force: true });
+    fs.cpSync(srcDotPrisma, destDotPrisma, { recursive: true, dereference: true });
+  }
+}
+
 function removeLiveDbFilesRecursively(dir) {
   if (!fs.existsSync(dir)) return;
   const entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -256,7 +311,7 @@ const versionMeta = {
   daemonVersion: `v${daemonPkg.version.replace(/^v/, '')}`,
   commit: commitSha,
   builtAt: new Date().toISOString(),
-  target: 'all-linux',
+  target: releaseArch ? `linux-${releaseArch}` : 'all-linux',
 };
 fs.writeFileSync(path.join(STAGING_DIR, 'version.json'), JSON.stringify(versionMeta, null, 2));
 fs.writeFileSync(path.join(DIST_DIR, 'version.json'), JSON.stringify(versionMeta, null, 2));
