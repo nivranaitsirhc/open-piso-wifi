@@ -371,7 +371,7 @@ function handleIncomingPulse(bcmPin: number) {
 
 /**
  * Sets the inhibit pin state.
- * Works seamlessly via the Python bridge (gpiozero) or direct onoff output.
+ * Works seamlessly via the Python GPIO bridge or direct onoff output.
  */
 function setInhibitPin(blocked: boolean) {
   // targetLevel: 0 (LOW / 0V) or 1 (HIGH / 3.3V)
@@ -437,7 +437,7 @@ function resetAutoDisableTimer() {
 }
 
 /**
- * Try initializing hardware via Python gpiozero bridge (Official modern standard for Bookworm & Pi 5)
+ * Try initializing hardware via the Python GPIO bridge (lgpio or gpiod).
  */
 function tryInitPythonBridge(coinBcm: number, inhibitBcm: number): Promise<boolean> {
   return new Promise((resolve) => {
@@ -460,7 +460,7 @@ function tryInitPythonBridge(coinBcm: number, inhibitBcm: number): Promise<boole
     }
 
     try {
-      console.log(`[GPIO] Spawning Python gpiozero bridge: ${scriptPath} ${coinBcm} ${inhibitBcm} ${inhibitActiveHigh}`);
+      console.log(`[GPIO] Spawning Python GPIO bridge: ${scriptPath} ${coinBcm} ${inhibitBcm} ${inhibitActiveHigh}`);
       const proc = spawn('python3', [
         '-u',
         scriptPath,
@@ -488,7 +488,7 @@ function tryInitPythonBridge(coinBcm: number, inhibitBcm: number): Promise<boole
               const msg = JSON.parse(line);
               if (msg.status === 'ready') {
                 bridgeProcess = proc;
-                console.log(`[GPIO] Python gpiozero bridge connected and ready! (Coin: BCM ${coinBcm}, Inhibit: BCM ${inhibitBcm}, activeHigh: ${inhibitActiveHigh})`);
+                console.log(`[GPIO] Python bridge connected and ready! (backend: ${msg.backend || 'auto'}, Coin: ${coinBcm}, Inhibit: ${inhibitBcm}, activeHigh: ${inhibitActiveHigh})`);
                 setInhibitPin(!coinSlotEnabled);
                 if (!resolved) {
                   resolved = true;
@@ -580,7 +580,7 @@ async function initGpio(coinBcm: number, inhibitBcm: number) {
     return;
   }
 
-  // 1. Primary: Python gpiozero bridge (Official modern standard for Bookworm & Pi 5)
+  // 1. Primary: Python GPIO bridge (lgpio on Raspberry Pi, gpiod on Orange Pi/Armbian)
   const pythonOk = await tryInitPythonBridge(coinBcm, inhibitBcm);
   if (pythonOk) {
     activeCoinBcm = coinBcm;
@@ -605,7 +605,7 @@ async function initGpio(coinBcm: number, inhibitBcm: number) {
   activeInhibitBcm = inhibitBcm;
   isHardwareGpioAvailable = false;
   if (!lastGpioError) {
-    lastGpioError = 'GPIO initialization failed. Install python3-gpiozero python3-lgpio via apt.';
+    lastGpioError = 'GPIO initialization failed. Install python3-gpiod (Orange Pi) or python3-gpiozero/python3-lgpio (Raspberry Pi) via apt.';
   }
   console.warn(`[GPIO] Hardware GPIO unavailable: ${lastGpioError}`);
 }

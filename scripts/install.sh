@@ -426,7 +426,7 @@ echo ""
 # ------------------------------------------------------------------------------
 echo -e "${PURPLE}[1/6] Installing minimal system runtime packages...${NC}"
 sudo apt-get update -y
-sudo DEBIAN_FRONTEND=noninteractive apt-get install -y curl tar sqlite3 openssh-client iptables-persistent netfilter-persistent build-essential python3 python3-gpiozero python3-lgpio gpiod
+sudo DEBIAN_FRONTEND=noninteractive apt-get install -y curl tar sqlite3 openssh-client iptables-persistent netfilter-persistent build-essential python3 python3-gpiozero python3-gpiod gpiod
 
 # Check Node.js version (Requires Node.js 20+)
 NEED_NODE_INSTALL=false
