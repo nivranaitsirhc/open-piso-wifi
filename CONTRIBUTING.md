@@ -7,7 +7,7 @@ Thank you for your interest in contributing to **OpenPisoWiFi**! As an open-sour
 ## 🛠️ Development Setup
 
 ### Prerequisites
-- **Node.js**: v20+ or **Bun**: v1.2+
+- **Node.js**: v20.20.2
 - **Git**
 - Optional: Linux environment / Raspberry Pi / OpenWrt router for hardware testing
 

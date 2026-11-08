@@ -21,6 +21,7 @@ PURPLE='\033[0;35m'
 NC='\033[0m'
 
 CURRENT_USER="${SUDO_USER:-$(logname 2>/dev/null || whoami)}"
+NODE_BIN="$(command -v node 2>/dev/null || echo /usr/bin/node)"
 if [ -n "${BASH_SOURCE[0]}" ] && [ -f "${BASH_SOURCE[0]}" ]; then
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     SOURCE_ROOT="$(dirname "$SCRIPT_DIR")"
@@ -540,7 +541,7 @@ if [ "$HAS_SUDO_ACCESS" = true ]; then
     if [ -f /etc/systemd/system/pisowifi-portal.service ]; then
         if grep -q "npm.*start" /etc/systemd/system/pisowifi-portal.service 2>/dev/null; then
             echo -e "--> Modernizing pisowifi-portal.service to use high-speed standalone node server..."
-            $SUDO_CMD sed -i 's|ExecStart=.*npm.*start.*|ExecStart=/usr/bin/node server.js|g' /etc/systemd/system/pisowifi-portal.service 2>/dev/null || true
+            $SUDO_CMD sed -i "s|ExecStart=.*npm.*start.*|ExecStart=${NODE_BIN} server.js|g" /etc/systemd/system/pisowifi-portal.service 2>/dev/null || true
         fi
     fi
 

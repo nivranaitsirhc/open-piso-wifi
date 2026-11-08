@@ -204,7 +204,7 @@ bash scripts/install.sh
 ```
 
 **What this does automatically:**
-- Installs minimal runtime packages (`curl`, `tar`, `sqlite3`, `iptables-persistent`, `nodejs` 20 LTS).
+- Installs minimal runtime packages (`curl`, `tar`, `sqlite3`, `iptables-persistent`, and official Node.js v20.20.2).
 - Configures static IP `192.168.1.240/24` (Gateway: `192.168.1.1`).
 - Downloads and extracts the pre-built release package from GitHub Releases.
 - Sets up `.env` configuration files and prepares the SQLite database in WAL mode.

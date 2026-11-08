@@ -2,6 +2,9 @@
   "name": "open-piso-wifi-landing",
   "version": "1.0.0",
   "private": true,
+  "engines": {
+    "node": "20.20.2"
+  },
   "scripts": {
     "prebuild": "node -e \"const fs=require('fs'); if(fs.existsSync('../scripts/sync-installer.mjs')){ require('child_process').execSync('node ../scripts/sync-installer.mjs', {stdio:'inherit'}); }\"",
     "dev": "next dev -p 3001",

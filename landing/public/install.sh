@@ -20,6 +20,7 @@ PURPLE='\033[0;35m'
 NC='\033[0m'
 
 CURRENT_USER="${SUDO_USER:-$(logname 2>/dev/null || whoami)}"
+NODE_VERSION="${OPENPISOWIFI_NODE_VERSION:-20.20.2}"
 if [ -n "${BASH_SOURCE[0]}" ] && [ -f "${BASH_SOURCE[0]}" ]; then
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     if [ "$(basename "$SCRIPT_DIR")" = "scripts" ]; then
@@ -431,27 +432,45 @@ echo ""
 # ------------------------------------------------------------------------------
 echo -e "${PURPLE}[1/6] Installing minimal system runtime packages...${NC}"
 sudo apt-get update -y
-sudo DEBIAN_FRONTEND=noninteractive apt-get install -y curl tar sqlite3 openssh-client iptables-persistent netfilter-persistent build-essential python3 python3-gpiozero python3-libgpiod gpiod
+sudo DEBIAN_FRONTEND=noninteractive apt-get install -y curl tar xz-utils libatomic1 sqlite3 openssh-client iptables-persistent netfilter-persistent build-essential python3 python3-gpiozero python3-libgpiod gpiod
 
-# Check Node.js version (Requires Node.js 20+)
-NEED_NODE_INSTALL=false
-if ! command -v node >/dev/null 2>&1; then
-    NEED_NODE_INSTALL=true
-else
-    NODE_MAJOR=$(node -v | cut -d'.' -f1 | sed 's/v//')
-    if [ "$NODE_MAJOR" -lt 20 ]; then
-        echo -e "${YELLOW}Existing Node.js ($NODE_MAJOR) is older than recommended Node 20 LTS.${NC}"
-        NEED_NODE_INSTALL=true
-    fi
+# Install the exact official Node.js release used by GitHub Actions. NodeSource
+# does not provide the required armhf repository, while nodejs.org publishes
+# official ARMv7 binaries.
+case "$(uname -m)" in
+    armv7l|armv7|armhf) NODE_DIST_ARCH="armv7l" ;;
+    aarch64|arm64|armv8*) NODE_DIST_ARCH="arm64" ;;
+    x86_64|amd64) NODE_DIST_ARCH="x64" ;;
+    *)
+        echo -e "${RED}Unsupported CPU architecture for Node.js: $(uname -m)${NC}"
+        exit 1
+        ;;
+esac
+
+NODE_INSTALL_ROOT="/usr/local/lib/nodejs"
+NODE_RELEASE_DIR="${NODE_INSTALL_ROOT}/node-v${NODE_VERSION}-linux-${NODE_DIST_ARCH}"
+NODE_TARBALL="/tmp/node-v${NODE_VERSION}-linux-${NODE_DIST_ARCH}.tar.xz"
+if [ "$(node -v 2>/dev/null || true)" != "v${NODE_VERSION}" ] || [ ! -x "${NODE_RELEASE_DIR}/bin/node" ]; then
+    echo -e "${CYAN}--> Installing official Node.js v${NODE_VERSION} for ${NODE_DIST_ARCH}...${NC}"
+    curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-${NODE_DIST_ARCH}.tar.xz" -o "$NODE_TARBALL"
+    sudo mkdir -p "$NODE_INSTALL_ROOT"
+    sudo tar -xJf "$NODE_TARBALL" -C "$NODE_INSTALL_ROOT"
+    sudo ln -sfn "$NODE_RELEASE_DIR" "${NODE_INSTALL_ROOT}/current"
+    for node_command in node npm npx corepack; do
+        if [ -x "${NODE_INSTALL_ROOT}/current/bin/${node_command}" ]; then
+            sudo ln -sfn "${NODE_INSTALL_ROOT}/current/bin/${node_command}" "/usr/local/bin/${node_command}"
+        fi
+    done
+    rm -f "$NODE_TARBALL"
 fi
-
-if [ "$NEED_NODE_INSTALL" = true ]; then
-    echo -e "${CYAN}--> Installing Node.js 20 LTS (NodeSource)...${NC}"
-    curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-    sudo apt-get install -y nodejs
+hash -r 2>/dev/null || true
+export PATH="/usr/local/bin:${PATH}"
+NODE_BIN="$(command -v node)"
+if [ "$(node -v)" != "v${NODE_VERSION}" ]; then
+    echo -e "${RED}Node.js version mismatch: expected v${NODE_VERSION}, found $(node -v) at ${NODE_BIN}.${NC}"
+    exit 1
 fi
-
-echo -e "${GREEN}✓ Node.js $(node -v) & npm $(npm -v) verified.${NC}"
+echo -e "${GREEN}✓ Node.js $(node -v) & npm $(npm -v) verified at ${NODE_BIN}.${NC}"
 
 # ------------------------------------------------------------------------------
 # STEP 2: CONFIGURE STATIC IP ($PORTAL_IP)
@@ -775,7 +794,7 @@ ExecStartPre=-/sbin/iptables -t nat -C PREROUTING -p tcp --dport 80 -j REDIRECT 
 ExecStartPre=-/sbin/iptables -t nat -A PREROUTING -p tcp --dport 80 -j REDIRECT --to-port ${PORTAL_PORT}
 ExecStartPre=-/sbin/iptables -t nat -C OUTPUT -p tcp -o lo --dport 80 -j REDIRECT --to-port ${PORTAL_PORT}
 ExecStartPre=-/sbin/iptables -t nat -A OUTPUT -p tcp -o lo --dport 80 -j REDIRECT --to-port ${PORTAL_PORT}
-ExecStart=/usr/bin/node dist/index.js
+ExecStart=${NODE_BIN} dist/index.js
 Restart=always
 RestartSec=3
 
@@ -794,7 +813,7 @@ Type=simple
 User=${CURRENT_USER}
 WorkingDirectory=${PORTAL_DIR}
 EnvironmentFile=-${PORTAL_DIR}/.env
-ExecStart=/usr/bin/node server.js
+ExecStart=${NODE_BIN} server.js
 Restart=always
 RestartSec=3
 Environment=NODE_ENV=production

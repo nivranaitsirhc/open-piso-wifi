@@ -2,6 +2,9 @@
   "name": "open-piso-wifi",
   "version": "1.0.2",
   "private": true,
+  "engines": {
+    "node": "20.20.2"
+  },
   "scripts": {
     "dev:portal": "cd portal && npm run dev",
     "dev:daemon": "cd daemon && npm run dev",

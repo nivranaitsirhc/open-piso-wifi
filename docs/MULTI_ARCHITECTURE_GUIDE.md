@@ -101,7 +101,7 @@ The OpenPisoWiFi Cloud Admin can be hosted for free on either **Vercel** or **Cl
    * Root directory: `portal`
    * Build command: `npx prisma generate && npx @cloudflare/next-on-pages` (or standard Next.js preset)
 3. Set Environment Variables:
-   * `NODE_VERSION`: `20`
+   * `NODE_VERSION`: `20.20.2`
    * `NEXT_PUBLIC_SUPABASE_URL`: `https://your-project.supabase.co`
    * `NEXT_PUBLIC_SUPABASE_KEY`: `your-anon-key`
 4. Deploy site.

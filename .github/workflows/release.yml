@@ -38,10 +38,10 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup Node.js 20 LTS
+      - name: Setup Node.js 20.20.2
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 20.20.2
 
       - name: Determine Release Tag
         id: vars
@@ -86,10 +86,10 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup Node.js 20 LTS
+      - name: Setup Node.js 20.20.2
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 20.20.2
 
       - name: Install JavaScript Dependencies
         run: |
