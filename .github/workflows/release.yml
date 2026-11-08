@@ -4,6 +4,15 @@ on:
   push:
     branches:
       - main
+    paths:
+      - '.github/workflows/release.yml'
+      - 'portal/**'
+      - 'daemon/**'
+      - 'openwrt/**'
+      - 'firmware/**'
+      - 'scripts/**'
+      - 'package.json'
+      - 'package-lock.json'
     tags:
       - 'v*'
   workflow_dispatch:
