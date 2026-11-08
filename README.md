@@ -328,7 +328,7 @@ flowchart LR
     Dev[💻 Developer] -->|npm run version:bump| Bump[🏷️ Auto Versioning]
     Bump -->|git push origin main| Repo[🐙 GitHub Repository]
     Repo -->|Trigger Workflow| Actions[⚙️ GitHub Actions CI]
-    Actions -->|Architecture-specific bundles| Dist[📦 opw-linux-{armv7,arm64,amd64}.tar.gz]
+    Actions -->|Architecture-specific bundles| Dist["📦 Distribution packages: ARMv7, ARM64, AMD64"]
     Dist -->|Publish| Release[🚀 GitHub Releases]
     Release -->|1-Click OTA| Machines[🍓 Linux SBC Fleet]
 ```
