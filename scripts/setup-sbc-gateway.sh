@@ -11,6 +11,7 @@
 # Usage:
 #   sudo ./scripts/setup-sbc-gateway.sh               # Run standard installation
 #   sudo ./scripts/setup-sbc-gateway.sh --dry-run     # Preview actions without changes
+#   sudo ./scripts/setup-sbc-gateway.sh --no-wan-portal # Keep portal LAN-only
 #   sudo ./scripts/setup-sbc-gateway.sh --rollback    # Remove gateway configuration
 #   sudo ./scripts/setup-sbc-gateway.sh --status      # Check current gateway status
 # ==============================================================================
@@ -33,6 +34,8 @@ LAN_PREFIX="${LAN_PREFIX:-}"
 LAN_NETMASK="${LAN_NETMASK:-}"
 DHCP_RANGE="${DHCP_RANGE:-10.0.0.10,10.0.3.250,255.255.252.0,12h}"
 PORTAL_PORT="${PORTAL_PORT:-3000}"
+# Expose only portal HTTP endpoints on WAN; keep daemon API port 4000 LAN-only.
+ALLOW_WAN_PORTAL="${ALLOW_WAN_PORTAL:-true}"
 INSTALL_ROOT="${OPENPISOWIFI_INSTALL_DIR:-/opt/open-piso-wifi}"
 DAEMON_ENV_FILE="${INSTALL_ROOT}/daemon/.env"
 GATEWAY_STATE_FILE="/etc/openpiso-gateway.env"
@@ -88,6 +91,14 @@ while [[ $# -gt 0 ]]; do
     --lan-iface)
       LAN_IFACE="$2"
       shift 2
+      ;;
+    --no-wan-portal)
+      ALLOW_WAN_PORTAL=false
+      shift
+      ;;
+    --wan-portal)
+      ALLOW_WAN_PORTAL=true
+      shift
       ;;
     *)
       echo -e "${RED}Unknown option: $1${NC}"
@@ -418,6 +429,7 @@ echo -e "• WAN Interface (ISP)  : ${YELLOW}${WAN_IFACE}${NC}"
 echo -e "• LAN Interface (AP)   : ${YELLOW}${LAN_IFACE}${NC}"
 echo -e "• Gateway Subnet       : ${YELLOW}${LAN_IP}/${LAN_PREFIX}${NC}"
 echo -e "• Captive Portal Port  : ${YELLOW}:${PORTAL_PORT}${NC}"
+echo -e "• WAN Portal Access    : ${YELLOW}${ALLOW_WAN_PORTAL}${NC} (HTTP 80/${PORTAL_PORT}; daemon API 4000 remains LAN-only)"
 echo -e "• Dry Run Mode         : ${YELLOW}${DRY_RUN}${NC}"
 echo ""
 
@@ -537,6 +549,11 @@ NFTABLES_INCLUDE="include \"${NFT_FILE}\""
 if [ "$DRY_RUN" = false ]; then
   mkdir -p /etc/nftables.d
 
+  WAN_PORTAL_RULE=""
+  if [ "$ALLOW_WAN_PORTAL" = true ]; then
+    WAN_PORTAL_RULE="    iif \"${WAN_IFACE}\" tcp dport { 80, ${PORTAL_PORT} } accept"
+  fi
+
   cat <<EOF > "$NFT_FILE"
 #!/usr/sbin/nft -f
 # ==============================================================================
@@ -579,6 +596,10 @@ table inet piso {
 
     # Allow captive portal web traffic
     iif "${LAN_IFACE}" tcp dport { 80, ${PORTAL_PORT}, 4000 } accept
+
+    # Optional upstream access to the portal only. The daemon API (4000)
+    # remains LAN-only by design.
+${WAN_PORTAL_RULE}
 
     # Allow SSH on management (or restrict as needed)
     tcp dport 22 accept
@@ -649,6 +670,11 @@ echo -e "${GREEN}🎉 OpenPisoWiFi Standalone Gateway Setup Complete!${NC}"
 echo -e "${CYAN}==============================================================${NC}"
 echo -e "• WAN Interface : ${YELLOW}${WAN_IFACE}${NC} (DHCP client to ISP modem)"
 echo -e "• LAN Interface : ${YELLOW}${LAN_IFACE}${NC} (Static ${LAN_IP}/${LAN_PREFIX})"
+if [ "$ALLOW_WAN_PORTAL" = true ]; then
+  echo -e "• WAN Portal   : ${YELLOW}http://<WAN-IP>/${NC} or ${YELLOW}http://<WAN-IP>:${PORTAL_PORT}/${NC}"
+else
+  echo -e "• WAN Portal   : ${YELLOW}disabled${NC} (use --wan-portal to enable)"
+fi
 echo -e "• Next Steps:"
 echo -e "  1. Plug Ethernet from LAN (${LAN_IFACE}) into ANY Wi-Fi Access Point (set in AP/Bridge mode)."
 echo -e "  2. Daemon mode and detected interfaces were saved to ${DAEMON_ENV_FILE}."
