@@ -21,6 +21,7 @@ import {
   Flame,
   Cloud,
   Heart,
+  Gauge,
 } from 'lucide-react';
 import { CloudSyncCard } from '@/components/admin/CloudSyncCard';
 import { AboutProjectCard } from '@/components/admin/AboutProjectCard';
@@ -87,8 +88,13 @@ const TAB_TITLES: Record<AdminTab, { title: string; subtitle: string; icon: any 
   },
   router: {
     title: 'Router & Wi-Fi Configuration',
-    subtitle: 'Ruijie OpenWrt gateway controller, bandwidth QoS speed limits, wireless radios & SSIDs',
+    subtitle: 'Ruijie OpenWrt gateway controller, wireless radios & SSIDs',
     icon: Radio,
+  },
+  qos: {
+    title: 'Bandwidth & QoS',
+    subtitle: 'Independent per-client download and upload limits for the gateway',
+    icon: Gauge,
   },
   devices: {
     title: 'VIP Whitelist & Blacklist',
@@ -406,9 +412,11 @@ export default function AdminPage() {
                     mutateSettings();
                   }}
                 />
-                <GatewayQoSCard />
               </div>
             )}
+
+            {/* Tab: Bandwidth & QoS */}
+            {activeTab === 'qos' && <GatewayQoSCard />}
 
             {/* Tab: Customer Loyalty & Streaks */}
             {activeTab === 'loyalty' && (

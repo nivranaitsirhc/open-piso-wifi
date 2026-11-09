@@ -1575,15 +1575,20 @@ nft list set inet piso_portal piso_blacklist 2>/dev/null || nft list set inet fw
       const downRate = down > 0 ? `${down}mbit` : parentRate;
       const upRate = up > 0 ? `${up}mbit` : parentRate;
       const ip = client.ipAddress!;
+      // Upload traffic enters the gateway on LAN. Shaping it on WAN egress
+      // is unreliable because source NAT may already have replaced the
+      // client's private source address by the time the WAN qdisc sees it.
+      // Ingress policing on LAN keeps the client IPv4 source available.
+      const uploadCommand = up > 0
+        ? `tc filter add dev "$LAN_IF" parent ffff: protocol ip prio 10 u32 match ip src ${ip}/32 police rate ${upRate} burst 64k mtu 1500 conform-exceed drop`
+        : '';
 
       classCommands.push(`
 # Client ${client.macAddress} (${ip})
 tc class add dev "$LAN_IF" parent 1:1 classid 1:${classId} htb rate ${downRate} ceil ${downRate}
 tc qdisc add dev "$LAN_IF" parent 1:${classId} handle ${classId}: fq_codel
 tc filter add dev "$LAN_IF" protocol ip parent 1: prio 10 u32 match ip dst ${ip}/32 flowid 1:${classId}
-tc class add dev "$WAN_IF" parent 1:1 classid 1:${classId} htb rate ${upRate} ceil ${upRate}
-tc qdisc add dev "$WAN_IF" parent 1:${classId} handle ${classId}: fq_codel
-tc filter add dev "$WAN_IF" protocol ip parent 1: prio 10 u32 match ip src ${ip}/32 flowid 1:${classId}
+${uploadCommand}
       `.trim());
     });
 
@@ -1606,15 +1611,15 @@ ${flowOffloadCommands}
 
 # Remove previous per-client IPv4 classes before rebuilding them.
 tc qdisc del dev "$LAN_IF" root 2>/dev/null || true
+# Remove the previous WAN egress classes from older releases. Upload is now
+# enforced at LAN ingress so NAT cannot hide the client's private source IP.
 tc qdisc del dev "$WAN_IF" root 2>/dev/null || true
+tc qdisc del dev "$LAN_IF" ingress 2>/dev/null || true
 tc qdisc add dev "$LAN_IF" root handle 1: htb default 999
 tc class add dev "$LAN_IF" parent 1: classid 1:1 htb rate ${parentRate} ceil ${parentRate}
 tc class add dev "$LAN_IF" parent 1:1 classid 1:999 htb rate ${parentRate} ceil ${parentRate}
 tc qdisc add dev "$LAN_IF" parent 1:999 handle 999: fq_codel
-tc qdisc add dev "$WAN_IF" root handle 1: htb default 999
-tc class add dev "$WAN_IF" parent 1: classid 1:1 htb rate ${parentRate} ceil ${parentRate}
-tc class add dev "$WAN_IF" parent 1:1 classid 1:999 htb rate ${parentRate} ceil ${parentRate}
-tc qdisc add dev "$WAN_IF" parent 1:999 handle 999: fq_codel
+tc qdisc add dev "$LAN_IF" handle ffff: ingress
 ${classCommands.join('\n')}
 echo "QOS_CLIENT_CLASSES_APPLIED=${activeClients.length}"
     `.trim();
@@ -1667,6 +1672,8 @@ echo "QOS_CLIENT_CLASSES_APPLIED=${activeClients.length}"
 ${wanDiscovery}
 echo "=== LAN_QDISC ==="
 tc -s qdisc show dev '${lanInterface}' 2>/dev/null || true
+echo "=== LAN_INGRESS_FILTERS ==="
+tc -s filter show dev '${lanInterface}' parent ffff: 2>/dev/null || true
 echo "=== WAN_QDISC ==="
 [ -n "$WAN_IF" ] && tc -s qdisc show dev "$WAN_IF" 2>/dev/null || true
 echo "=== WAN_IF ==="
@@ -1676,7 +1683,7 @@ echo "$WAN_IF"
     const res = await this.executeCommand(command);
     const output = res.stdout || '';
 
-    const hasLanQos = output.includes('cake') || output.includes('tbf') || output.includes('fq_codel');
+    const hasLanQos = output.includes('cake') || output.includes('tbf') || output.includes('fq_codel') || output.includes('htb');
     const wanIf = output.split('=== WAN_IF ===')[1]?.trim() || 'wan';
 
     // Parse download rate if available

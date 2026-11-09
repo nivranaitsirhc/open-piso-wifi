@@ -24,6 +24,7 @@ import {
   Flame,
   Cloud,
   Heart,
+  Gauge,
 } from 'lucide-react';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { Badge } from '@/components/ui/Badge';
@@ -39,6 +40,7 @@ export type AdminTab =
   | 'posters'
   | 'branding'
   | 'router'
+  | 'qos'
   | 'devices'
   | 'machine'
   | 'system'
@@ -142,6 +144,11 @@ export function AdminSidebar({
           label: 'Router & Wi-Fi',
           icon: Radio,
         }] : []),
+        {
+          id: 'qos' as AdminTab,
+          label: 'Bandwidth & QoS',
+          icon: Gauge,
+        },
         {
           id: 'devices' as AdminTab,
           label: 'VIP & Blacklist',
