@@ -549,10 +549,10 @@ NFTABLES_INCLUDE="include \"${NFT_FILE}\""
 if [ "$DRY_RUN" = false ]; then
   mkdir -p /etc/nftables.d
 
-  WAN_PORTAL_RULE=""
-  if [ "$ALLOW_WAN_PORTAL" = true ]; then
-    WAN_PORTAL_RULE="    iif \"${WAN_IFACE}\" tcp dport { 80, ${PORTAL_PORT} } accept"
-  fi
+    WAN_PORTAL_RULE=""
+    if [ "$ALLOW_WAN_PORTAL" = true ]; then
+        WAN_PORTAL_RULE="    iifname \"${WAN_IFACE}\" tcp dport { 80, ${PORTAL_PORT} } accept"
+    fi
 
   cat <<EOF > "$NFT_FILE"
 #!/usr/sbin/nft -f
@@ -585,17 +585,17 @@ table inet piso {
     ct state established,related accept
 
     # Allow localhost traffic
-    iif "lo" accept
+    iifname "lo" accept
 
     # Drop blacklisted clients immediately
     ether saddr @piso_blacklist drop
 
     # Allow essential network services from LAN
-    iif "${LAN_IFACE}" udp dport { 53, 67 } accept
-    iif "${LAN_IFACE}" tcp dport 53 accept
+    iifname "${LAN_IFACE}" udp dport { 53, 67 } accept
+    iifname "${LAN_IFACE}" tcp dport 53 accept
 
     # Allow captive portal web traffic
-    iif "${LAN_IFACE}" tcp dport { 80, ${PORTAL_PORT}, 4000 } accept
+    iifname "${LAN_IFACE}" tcp dport { 80, ${PORTAL_PORT}, 4000 } accept
 
     # Optional upstream access to the portal only. The daemon API (4000)
     # remains LAN-only by design.
@@ -619,7 +619,7 @@ ${WAN_PORTAL_RULE}
     ether saddr @piso_whitelist accept
 
     # Allow paid authorized customers
-    iif "${LAN_IFACE}" oif "${WAN_IFACE}" ether saddr @piso_auth accept
+    iifname "${LAN_IFACE}" oifname "${WAN_IFACE}" ether saddr @piso_auth accept
   }
 
   # Network Address Translation (NAT) & Captive Redirection
@@ -631,13 +631,13 @@ ${WAN_PORTAL_RULE}
     ether saddr @piso_auth return
 
     # Intercept HTTP Port 80 from unauthorized clients and redirect to captive portal
-    iif "${LAN_IFACE}" tcp dport 80 redirect to :${PORTAL_PORT}
+    iifname "${LAN_IFACE}" tcp dport 80 redirect to :${PORTAL_PORT}
   }
 
   # Masquerade outbound traffic to ISP WAN
   chain postrouting {
     type nat hook postrouting priority srcnat; policy accept;
-    oif "${WAN_IFACE}" masquerade
+    oifname "${WAN_IFACE}" masquerade
   }
 }
 EOF
