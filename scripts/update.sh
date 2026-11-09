@@ -265,6 +265,7 @@ echo -e "• Installed Version: ${YELLOW}${CURRENT_VERSION}${NC}"
 
 LATEST_TAG=""
 ASSET_ID=""
+ASSET_URL=""
 API_URL="https://api.github.com/repos/${GITHUB_REPO}/releases/latest"
 
 query_github_release() {
@@ -295,6 +296,15 @@ parse_release_json() {
                 } catch(e){}
             });
         ' "$RELEASE_TARBALL" 2>/dev/null || echo "")
+        ASSET_URL=$(echo "$json" | node -e '
+            let d=""; process.stdin.on("data", c=>d+=c); process.stdin.on("end", ()=>{
+                try {
+                    const j=JSON.parse(d);
+                    const a=j.assets?.find(x=>x.name===process.argv[1]);
+                    if(a?.browser_download_url) console.log(a.browser_download_url);
+                } catch(e){}
+            });
+        ' "$RELEASE_TARBALL" 2>/dev/null || echo "")
     fi
 
     if [ -z "$LATEST_TAG" ]; then
@@ -308,6 +318,9 @@ parse_release_json() {
         if [ -z "$ASSET_ID" ]; then
             ASSET_ID=$(echo "$json" | grep -B 4 "\"name\": \"${RELEASE_TARBALL}\"" | grep '"id":' | head -n1 | tr -dc '0-9')
         fi
+    fi
+    if [ -z "$ASSET_URL" ]; then
+        ASSET_URL=$(echo "$json" | grep -o '"browser_download_url": *"[^"]*' | grep -F "$RELEASE_TARBALL" | head -n1 | cut -d'"' -f4 || echo "")
     fi
 }
 
@@ -455,11 +468,22 @@ elif [ -f "/tmp/${RELEASE_TARBALL}.manual" ]; then
 else
     DOWNLOAD_SUCCESS=false
     
+    download_asset() {
+        local url="$1"
+        if [ -n "$GITHUB_TOKEN" ]; then
+            curl -fL --retry 3 --retry-delay 2 --connect-timeout 15 \
+                 -H "Authorization: Bearer $GITHUB_TOKEN" --progress-bar "$url" -o "$TEMP_TARBALL"
+        else
+            curl -fL --retry 3 --retry-delay 2 --connect-timeout 15 \
+                 --progress-bar "$url" -o "$TEMP_TARBALL"
+        fi
+    }
+
     # 1. Direct public release download (Primary for public repositories)
     echo -e "--> Attempting direct download from GitHub Releases..."
-    if curl -fSL --progress-bar "https://github.com/${GITHUB_REPO}/releases/latest/download/${RELEASE_TARBALL}" -o "$TEMP_TARBALL" 2>/dev/null; then
+    if download_asset "https://github.com/$GITHUB_REPO/releases/latest/download/$RELEASE_TARBALL"; then
         DOWNLOAD_SUCCESS=true
-    elif [ -n "$LATEST_TAG" ] && curl -fSL --progress-bar "https://github.com/${GITHUB_REPO}/releases/download/${LATEST_TAG}/${RELEASE_TARBALL}" -o "$TEMP_TARBALL" 2>/dev/null; then
+    elif [ -n "$LATEST_TAG" ] && download_asset "https://github.com/$GITHUB_REPO/releases/download/$LATEST_TAG/$RELEASE_TARBALL"; then
         DOWNLOAD_SUCCESS=true
     fi
 
@@ -471,6 +495,15 @@ else
              -H "Accept: application/octet-stream" \
              "https://api.github.com/repos/${GITHUB_REPO}/releases/assets/${ASSET_ID}" \
              -o "$TEMP_TARBALL"; then
+            DOWNLOAD_SUCCESS=true
+        fi
+    fi
+
+    # Exact asset URL fallback from the release API. This also handles a
+    # temporary delay before GitHub's /latest download alias is updated.
+    if [ "$DOWNLOAD_SUCCESS" = false ] && [ -n "$ASSET_URL" ]; then
+        echo -e "--> Retrying the exact release asset URL..."
+        if download_asset "$ASSET_URL"; then
             DOWNLOAD_SUCCESS=true
         fi
     fi

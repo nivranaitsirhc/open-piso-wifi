@@ -615,6 +615,7 @@ if [ "$ALREADY_EXTRACTED" = false ]; then
         DOWNLOAD_SUCCESS=false
         API_URL="https://api.github.com/repos/${GITHUB_REPO}/releases/latest"
         ASSET_ID=""
+        ASSET_URL=""
         RELEASE_TAG=""
 
         fetch_api() {
@@ -686,11 +687,34 @@ if [ "$ALREADY_EXTRACTED" = false ]; then
                     $0 ~ name { if (id != "") { print id; exit } }
                 ')
             fi
+            ASSET_URL=$(echo "$JSON" | node -e '
+                let d=""; process.stdin.on("data", c=>d+=c); process.stdin.on("end", ()=>{
+                    try {
+                        const j=JSON.parse(d);
+                        const a=j.assets?.find(x=>x.name===process.argv[1]);
+                        if(a?.browser_download_url) console.log(a.browser_download_url);
+                    } catch(e){}
+                });
+            ' "$RELEASE_TARBALL" 2>/dev/null || echo "")
+            if [ -z "$ASSET_URL" ]; then
+                ASSET_URL=$(echo "$JSON" | grep -o '"browser_download_url": *"[^"]*' | grep -F "$RELEASE_TARBALL" | head -n1 | cut -d'"' -f4 || echo "")
+            fi
         fi
+
+        download_asset() {
+            local url="$1"
+            if [ -n "$GITHUB_TOKEN" ]; then
+                curl -fL --retry 3 --retry-delay 2 --connect-timeout 15 \
+                     -H "Authorization: Bearer $GITHUB_TOKEN" --progress-bar "$url" -o "$TEMP_TARBALL"
+            else
+                curl -fL --retry 3 --retry-delay 2 --connect-timeout 15 \
+                     --progress-bar "$url" -o "$TEMP_TARBALL"
+            fi
+        }
 
         # 1. Public direct download (Primary for public repositories)
         echo -e "--> Attempting direct download from GitHub Releases..."
-        if curl -fSL --progress-bar "https://github.com/${GITHUB_REPO}/releases/latest/download/${RELEASE_TARBALL}" -o "$TEMP_TARBALL" 2>/dev/null; then
+        if download_asset "https://github.com/$GITHUB_REPO/releases/latest/download/$RELEASE_TARBALL"; then
             DOWNLOAD_SUCCESS=true
         fi
 
@@ -698,9 +722,7 @@ if [ "$ALREADY_EXTRACTED" = false ]; then
         # latest alias is unavailable or the release is not marked latest.
         if [ "$DOWNLOAD_SUCCESS" = false ] && [ -n "$RELEASE_TAG" ]; then
             echo -e "--> Retrying tagged release download (${RELEASE_TAG})..."
-            if curl -fSL --progress-bar \
-                "https://github.com/${GITHUB_REPO}/releases/download/${RELEASE_TAG}/${RELEASE_TARBALL}" \
-                -o "$TEMP_TARBALL" 2>/dev/null; then
+            if download_asset "https://github.com/$GITHUB_REPO/releases/download/$RELEASE_TAG/$RELEASE_TARBALL"; then
                 DOWNLOAD_SUCCESS=true
             fi
         fi
@@ -713,6 +735,13 @@ if [ "$ALREADY_EXTRACTED" = false ]; then
                  -H "Accept: application/octet-stream" \
                  "https://api.github.com/repos/${GITHUB_REPO}/releases/assets/${ASSET_ID}" \
                  -o "$TEMP_TARBALL"; then
+                DOWNLOAD_SUCCESS=true
+            fi
+        fi
+
+        if [ "$DOWNLOAD_SUCCESS" = false ] && [ -n "$ASSET_URL" ]; then
+            echo -e "--> Retrying the exact release asset URL..."
+            if download_asset "$ASSET_URL"; then
                 DOWNLOAD_SUCCESS=true
             fi
         fi

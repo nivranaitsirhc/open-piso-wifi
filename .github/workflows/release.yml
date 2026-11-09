@@ -143,17 +143,38 @@ jobs:
           path: dist
           merge-multiple: true
 
+      - name: Create Release Description
+        run: |
+          TAG="${{ needs.prepare-release.outputs.tag }}"
+          cat > release-notes.md <<EOF
+          # OpenPisoWiFi ${TAG}
+
+          Architecture-specific pre-built Linux bundles for OpenPisoWiFi.
+
+          Included assets:
+          - `opw-linux-armv7.tar.gz`
+          - `opw-linux-arm64.tar.gz`
+          - `opw-linux-amd64.tar.gz`
+          - `version.json`
+
+          The installer and updater select the matching bundle from the SBC architecture automatically.
+          EOF
+
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.prepare-release.outputs.tag }}
           name: OpenPisoWiFi ${{ needs.prepare-release.outputs.tag }}
+          body_path: release-notes.md
+          append_body: false
+          generate_release_notes: false
           files: |
             dist/opw-linux-armv7.tar.gz
             dist/opw-linux-arm64.tar.gz
             dist/opw-linux-amd64.tar.gz
             dist/version.json
-          generate_release_notes: true
+          overwrite_files: true
+          fail_on_unmatched_files: true
           make_latest: true
           draft: false
           prerelease: false
