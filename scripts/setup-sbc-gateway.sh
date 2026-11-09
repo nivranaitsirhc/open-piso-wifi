@@ -43,6 +43,8 @@ IFUPDOWN_FILE="/etc/network/interfaces.d/openpiso-gateway"
 DHCPCD_MARKER_BEGIN="# BEGIN OPENPISOWIFI GATEWAY"
 DHCPCD_MARKER_END="# END OPENPISOWIFI GATEWAY"
 FALLBACK_NETWORK_UNIT="/etc/systemd/system/openpiso-gateway-network.service"
+DNSMASQ_DROPIN="/etc/systemd/system/dnsmasq.service.d/openpiso-gateway.conf"
+NFTABLES_DROPIN="/etc/systemd/system/nftables.service.d/openpiso-gateway.conf"
 NETWORK_BACKEND=""
 
 # Reuse the last explicit gateway assignment on reruns. Command-line and
@@ -240,6 +242,7 @@ configure_gateway_network() {
   nmcli connection delete openpiso-gateway-lan 2>/dev/null || true
   nmcli connection delete openpiso-gateway-wan 2>/dev/null || true
   rm -f "$NETWORKD_WAN_FILE" "$NETWORKD_LAN_FILE" "$FALLBACK_NETWORK_UNIT"
+  rm -f "$DNSMASQ_DROPIN" "$NFTABLES_DROPIN"
   sed -i "/^${DHCPCD_MARKER_BEGIN}$/,/^${DHCPCD_MARKER_END}$/d" /etc/dhcpcd.conf 2>/dev/null || true
 
   if command -v nmcli >/dev/null 2>&1 && systemctl is-active --quiet NetworkManager; then
@@ -304,18 +307,28 @@ EOF
     systemctl enable --now dhcpcd 2>/dev/null || systemctl restart dhcpcd 2>/dev/null || true
   else
     NETWORK_BACKEND="systemd-fallback"
+    mkdir -p "$(dirname "$DNSMASQ_DROPIN")" "$(dirname "$NFTABLES_DROPIN")"
+    for dropin in "$DNSMASQ_DROPIN" "$NFTABLES_DROPIN"; do
+      cat > "$dropin" <<EOF
+[Unit]
+Requires=openpiso-gateway-network.service
+After=openpiso-gateway-network.service
+EOF
+    done
     cat > "$FALLBACK_NETWORK_UNIT" <<EOF
 [Unit]
 Description=OpenPisoWiFi persistent SBC LAN configuration
 Wants=network-pre.target
-After=network-pre.target
+After=network-pre.target network.target
 Before=dnsmasq.service nftables.service
 
 [Service]
 Type=oneshot
-ExecStart=${ip_bin} link set dev ${LAN_IFACE} up
-ExecStart=${ip_bin} addr replace ${LAN_IP}/${LAN_PREFIX} dev ${LAN_IFACE}
+ExecStart=/bin/bash -c 'for attempt in {1..60}; do if ${ip_bin} link show dev ${LAN_IFACE} >/dev/null 2>&1; then ${ip_bin} link set dev ${LAN_IFACE} up && ${ip_bin} addr replace ${LAN_IP}/${LAN_PREFIX} dev ${LAN_IFACE} && ${ip_bin} -o -4 addr show dev ${LAN_IFACE} | grep -Fq " inet ${LAN_IP}/${LAN_PREFIX} " && exit 0; fi; sleep 2; done; echo "Timed out waiting for ${LAN_IFACE} to receive ${LAN_IP}/${LAN_PREFIX}" >&2; exit 1'
 RemainAfterExit=yes
+Restart=on-failure
+RestartSec=5
+TimeoutStartSec=130
 
 [Install]
 WantedBy=multi-user.target
@@ -370,6 +383,8 @@ if [ "$ROLLBACK" = true ]; then
   nmcli connection delete openpiso-gateway-wan 2>/dev/null || true
   sed -i "/^${DHCPCD_MARKER_BEGIN}$/,/^${DHCPCD_MARKER_END}$/d" /etc/dhcpcd.conf 2>/dev/null || true
   rm -f "$NETWORKD_WAN_FILE" "$NETWORKD_LAN_FILE" "$IFUPDOWN_FILE" "$FALLBACK_NETWORK_UNIT" "$GATEWAY_STATE_FILE"
+  rm -f "$DNSMASQ_DROPIN" "$NFTABLES_DROPIN"
+  rmdir "$(dirname "$DNSMASQ_DROPIN")" "$(dirname "$NFTABLES_DROPIN")" 2>/dev/null || true
   systemctl disable --now openpiso-gateway-network.service 2>/dev/null || true
   systemctl daemon-reload 2>/dev/null || true
 
@@ -454,6 +469,10 @@ echo -e "${CYAN}🌐 Configuring LAN Interface (${LAN_IFACE} -> ${LAN_IP}/${LAN_
 
 if [ "$DRY_RUN" = false ]; then
   configure_gateway_network
+  if ! ip -o -4 addr show dev "$LAN_IFACE" 2>/dev/null | awk '{print $4}' | grep -Fxq "${LAN_IP}/${LAN_PREFIX}"; then
+    echo -e "${RED}❌ LAN address ${LAN_IP}/${LAN_PREFIX} is not active on ${LAN_IFACE}.${NC}" >&2
+    exit 1
+  fi
 fi
 echo -e "${GREEN}✅ LAN interface configured.${NC}"
 
