@@ -706,13 +706,11 @@ if [ "$ALREADY_EXTRACTED" = false ]; then
             printf 'curl binary: %s\n' "$(command -v curl)" >&2
             printf 'download URL: <%q>\n' "$url" >&2
             printf 'tarball path: <%q>\n' "$TEMP_TARBALL" >&2
-            if [ -n "$GITHUB_TOKEN" ]; then
-                command curl -fL --retry 3 --retry-delay 2 --connect-timeout 15 \
-                     -H "Authorization: Bearer $GITHUB_TOKEN" --progress-bar "$url" -o "$TEMP_TARBALL"
-            else
-                command curl -fL --retry 3 --retry-delay 2 --connect-timeout 15 \
-                     --progress-bar "$url" -o "$TEMP_TARBALL"
-            fi
+            # Browser release URLs are public and work without credentials.
+            # Keep tokens out of this path; authenticated API downloads use
+            # their own request below.
+            command curl -fL --retry 3 --retry-delay 2 --connect-timeout 15 \
+                 --progress-bar "$url" -o "$TEMP_TARBALL"
         }
 
         # 1. Public direct download (Primary for public repositories)
