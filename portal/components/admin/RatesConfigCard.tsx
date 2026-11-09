@@ -63,6 +63,10 @@ interface RatesConfigCardProps {
     portal_theme?: string;
     announcement?: string;
     // GPIO Hardware Pin Settings
+    gpio_backend?: string;
+    gpio_chip?: string;
+    gpio_coin_line?: string;
+    gpio_inhibit_line?: string;
     coin_gpio_pin?: string;
     inhibit_gpio_pin?: string;
     coin_slot_timeout_seconds?: string;
@@ -105,10 +109,14 @@ export function RatesConfigCard({ initialSettings, onSaveSuccess, onNavigateTab 
     show_coin_simulator: initialSettings.show_coin_simulator ?? 'false',
     portal_theme: initialSettings.portal_theme || 'emerald',
     announcement: initialSettings.announcement || '⚡ High-Speed Fiber Internet • Low Ping for Online Gaming & Browsing!',
-    // GPIO Hardware Pin Settings (BCM numbers)
-    // Default: Coin = BCM 2 (Physical Pin 3, WiringPi 8), Inhibit = BCM 3 (Physical Pin 5, WiringPi 9)
-    coin_gpio_pin: initialSettings.coin_gpio_pin || '2',
-    inhibit_gpio_pin: initialSettings.inhibit_gpio_pin || '3',
+    // Board-neutral GPIO settings. Legacy BCM values remain supported only
+    // when the legacy lgpio backend is selected.
+    gpio_backend: initialSettings.gpio_backend || (initialSettings.coin_gpio_pin ? 'lgpio' : 'auto'),
+    gpio_chip: initialSettings.gpio_chip || '/dev/gpiochip0',
+    gpio_coin_line: initialSettings.gpio_coin_line || '',
+    gpio_inhibit_line: initialSettings.gpio_inhibit_line || '',
+    coin_gpio_pin: initialSettings.coin_gpio_pin || '',
+    inhibit_gpio_pin: initialSettings.inhibit_gpio_pin || '',
     coin_slot_timeout_seconds: initialSettings.coin_slot_timeout_seconds || '60',
   });
 
@@ -490,17 +498,23 @@ export function RatesConfigCard({ initialSettings, onSaveSuccess, onNavigateTab 
           <div className="mt-4 pt-4 border-t-2 border-black/10 dark:border-white/10 space-y-3">
             <div className="flex items-center gap-2 text-xs font-black uppercase text-black dark:text-white font-display">
               <Cpu className="w-4 h-4 text-purple-600 dark:text-purple-400" />
-              <span>GPIO Hardware Pins — Linux SBC (BCM numbering)</span>
-              <span className="text-[10px] font-bold text-neutral-500 ml-1">used by onoff package · not physical pin numbers</span>
+              <span>Board-neutral GPIO Hardware</span>
+              <span className="text-[10px] font-bold text-neutral-500 ml-1">libgpiod line offsets are recommended for non-Raspberry-Pi SBCs</span>
             </div>
             <GpioPinSelector
-              coinBcm={parseInt(formData.coin_gpio_pin || '4', 10)}
-              inhibitBcm={parseInt(formData.inhibit_gpio_pin || '17', 10)}
-              onChange={(coinBcm, inhibitBcm) =>
+              backend={formData.gpio_backend}
+              chip={formData.gpio_chip}
+              coin={formData.gpio_backend === 'gpiod' || formData.gpio_backend === 'auto' ? formData.gpio_coin_line : formData.coin_gpio_pin}
+              inhibit={formData.gpio_backend === 'gpiod' || formData.gpio_backend === 'auto' ? formData.gpio_inhibit_line : formData.inhibit_gpio_pin}
+              onChange={({ backend, chip, coin, inhibit }) =>
                 setFormData({
                   ...formData,
-                  coin_gpio_pin: String(coinBcm),
-                  inhibit_gpio_pin: String(inhibitBcm),
+                  gpio_backend: backend,
+                  gpio_chip: chip,
+                  gpio_coin_line: backend === 'gpiod' || backend === 'auto' ? coin : formData.gpio_coin_line,
+                  gpio_inhibit_line: backend === 'gpiod' || backend === 'auto' ? inhibit : formData.gpio_inhibit_line,
+                  coin_gpio_pin: backend === 'lgpio' ? coin : formData.coin_gpio_pin,
+                  inhibit_gpio_pin: backend === 'lgpio' ? inhibit : formData.inhibit_gpio_pin,
                 })
               }
             />

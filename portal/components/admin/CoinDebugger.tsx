@@ -30,15 +30,22 @@ function formatTs(ts: number) {
   const d = new Date(ts);
   return d.toLocaleTimeString('en-PH', { hour12: false }) + '.' + String(d.getMilliseconds()).padStart(3, '0');
 }
-
 interface CoinEvent {
   timestamp: number;
   type: 'pulse' | 'coin_detected' | 'slot_enabled' | 'slot_disabled' | 'inhibit_timeout' | 'error';
   value?: number;
   bcmPin?: number;
+  gpioPin?: number;
+  gpioPinType?: 'line' | 'bcm';
   rawPulseCount?: number;
   trainMs?: number;
   breakdown?: number[];
+}
+
+function pinLabel(pin?: number, pinType?: 'line' | 'bcm', legacyBcm?: number) {
+  if (pin == null && legacyBcm == null) return '—';
+  const value = pin ?? legacyBcm;
+  return pinType === 'line' ? `line ${value}` : `BCM ${value}`;
 }
 
 interface DenomStat {
@@ -153,7 +160,7 @@ export function CoinDebugger() {
       case 'pulse':
         return (
           <span className="text-neutral-300">
-            PULSE <span className="font-mono text-[#67e8f9]">BCM {event.bcmPin}</span>
+            PULSE <span className="font-mono text-[#67e8f9]">{pinLabel(event.gpioPin, event.gpioPinType, event.bcmPin)}</span>
             <span className="text-emerald-400 font-bold ml-2">(+₱1 pulse credited)</span>
           </span>
         );
@@ -173,7 +180,7 @@ export function CoinDebugger() {
                 {breakdownStr}
               </span>
             )}
-            <span className="font-mono text-neutral-400 ml-2">BCM {event.bcmPin}</span>
+            <span className="font-mono text-neutral-400 ml-2">{pinLabel(event.gpioPin, event.gpioPinType, event.bcmPin)}</span>
             <span className="text-neutral-400 ml-2">
               {event.rawPulseCount} pulses · {event.trainMs}ms
             </span>
@@ -188,13 +195,13 @@ export function CoinDebugger() {
         );
       }
       case 'slot_enabled':
-        return <span className="text-purple-300 font-semibold">SLOT ENABLED — inhibit BCM {event.bcmPin} → LOW</span>;
+        return <span className="text-purple-300 font-semibold">SLOT ENABLED — inhibit {pinLabel(event.gpioPin, event.gpioPinType, event.bcmPin)} → LOW</span>;
       case 'slot_disabled':
-        return <span className="text-neutral-400 font-semibold">SLOT DISABLED — inhibit BCM {event.bcmPin} → HIGH</span>;
+        return <span className="text-neutral-400 font-semibold">SLOT DISABLED — inhibit {pinLabel(event.gpioPin, event.gpioPinType, event.bcmPin)} → HIGH</span>;
       case 'inhibit_timeout':
         return <span className="text-amber-400 font-semibold">AUTO-INHIBIT TIMEOUT — slot blocked</span>;
       case 'error':
-        return <span className="text-rose-400 font-semibold">GPIO ERROR on BCM {event.bcmPin}</span>;
+        return <span className="text-rose-400 font-semibold">GPIO ERROR on {pinLabel(event.gpioPin, event.gpioPinType, event.bcmPin)}</span>;
       default:
         return <span className="text-neutral-400">{event.type}</span>;
     }
@@ -212,7 +219,7 @@ export function CoinDebugger() {
             <div>
               <CardTitle>Hardware GPIO Status</CardTitle>
               <p className="text-xs text-neutral-600 dark:text-[#b7c6c2] font-semibold">
-                Linux SBC physical header & CL-168 coin acceptor connection
+                Detected GPIO backend/chip & CL-168 coin acceptor connection
               </p>
             </div>
           </div>
@@ -225,16 +232,16 @@ export function CoinDebugger() {
           </div>
         </CardHeader>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 text-xs">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 text-xs">
           <div className="p-3 rounded-xl bg-[#f8f6ee] dark:bg-[#111713] border-2 border-black dark:border-[#4a6052] shadow-neo-sm text-center">
-            <div className="text-[10px] font-black uppercase text-neutral-600 dark:text-[#b7c6c2] mb-1">Coin Pin</div>
-            <div className="font-black text-black dark:text-[#ffe17c] text-base font-display">BCM {state?.coinBcm ?? '—'}</div>
-            <div className="text-[10px] font-mono font-bold text-neutral-500 dark:text-neutral-400">Pin {state?.coinBcm != null ? (BCM_TO_PHYSICAL[state.coinBcm] ?? '?') : '—'}</div>
+            <div className="text-[10px] font-black uppercase text-neutral-600 dark:text-[#b7c6c2] mb-1">Coin input</div>
+            <div className="font-black text-black dark:text-[#ffe17c] text-base font-display">{state?.coinPin ?? pinLabel(state?.coinLine, state?.pinType, state?.coinBcm)}</div>
+            <div className="text-[10px] font-mono font-bold text-neutral-500 dark:text-neutral-400">{state?.gpioChip ?? state?.backend ?? '—'}</div>
           </div>
           <div className="p-3 rounded-xl bg-[#f8f6ee] dark:bg-[#111713] border-2 border-black dark:border-[#4a6052] shadow-neo-sm text-center">
-            <div className="text-[10px] font-black uppercase text-neutral-600 dark:text-[#b7c6c2] mb-1">Inhibit Pin</div>
-            <div className="font-black text-black dark:text-[#ffe17c] text-base font-display">BCM {state?.inhibitBcm ?? '—'}</div>
-            <div className="text-[10px] font-mono font-bold text-neutral-500 dark:text-neutral-400">Pin {state?.inhibitBcm != null ? (BCM_TO_PHYSICAL[state.inhibitBcm] ?? '?') : '—'}</div>
+            <div className="text-[10px] font-black uppercase text-neutral-600 dark:text-[#b7c6c2] mb-1">Inhibit output</div>
+            <div className="font-black text-black dark:text-[#ffe17c] text-base font-display">{state?.inhibitPin ?? pinLabel(state?.inhibitLine, state?.pinType, state?.inhibitBcm)}</div>
+            <div className="text-[10px] font-mono font-bold text-neutral-500 dark:text-neutral-400">{state?.gpioChip ?? state?.backend ?? '—'}</div>
             <div className="mt-1 text-[9px] font-black uppercase text-purple-600 dark:text-purple-400 leading-tight">
               {state?.inhibitActiveHigh ? 'Default HIGH (Built-in)' : 'Default LOW (Relay)'}
             </div>
@@ -269,7 +276,7 @@ export function CoinDebugger() {
               <div className="font-black text-sm">Hardware GPIO Alert</div>
               <div className="font-mono text-[11px] mt-0.5 font-bold">{state.lastGpioError}</div>
               <div className="text-[11px] mt-1 font-semibold text-neutral-800">
-                Note: Physical Pin 3 (BCM 2) and Pin 5 (BCM 3) are I2C bus pins. If locked with EBUSY, move your wires to Pin 7 (BCM 4) for Coin and Pin 11 (BCM 17) for Inhibit, then update in Settings.
+                Check the configured GPIO chip and line offsets with the target board's gpioinfo output. Avoid sharing either line with I2C, SPI, UART, or another kernel consumer.
               </div>
             </div>
           </div>
@@ -385,13 +392,13 @@ export function CoinDebugger() {
         <div className="mt-3.5 p-3.5 rounded-xl bg-[#f8f6ee] dark:bg-[#111713] border-2 border-black dark:border-[#4a6052] shadow-neo-sm text-xs font-mono text-black dark:text-white space-y-1">
           <div className="flex items-center gap-1.5 font-bold font-sans text-sm mb-1.5">
             <AlertTriangle className="w-4 h-4 text-amber-500" />
-            <span>CL-168 Wiring Reference (Physical & BCM Pinout)</span>
+            <span>CL-168 Wiring Reference (Board-neutral GPIO)</span>
           </div>
           <div className="space-y-1 font-bold text-[11px]">
             <div><span className="font-extrabold text-red-600 dark:text-red-400">RED</span> → +12V / +5V Power supply</div>
             <div><span className="font-extrabold text-neutral-600 dark:text-neutral-400">BLACK</span> → GND Common Ground</div>
-            <div><span className="font-extrabold text-amber-600 dark:text-[#ffe17c]">YELLOW/WHITE</span> → 10kΩ → BCM {state?.coinBcm ?? 4} (Physical Pin {state?.coinBcm != null ? (BCM_TO_PHYSICAL[state.coinBcm] ?? '?') : 7}) ✅</div>
-            <div><span className="font-extrabold text-blue-600 dark:text-blue-400">BLUE</span> → BCM {state?.inhibitBcm ?? 17} (Physical Pin {state?.inhibitBcm != null ? (BCM_TO_PHYSICAL[state.inhibitBcm] ?? '?') : 11}) [Inhibit]</div>
+            <div><span className="font-extrabold text-amber-600 dark:text-[#ffe17c]">YELLOW/WHITE</span> → 10kΩ → {state?.coinPin ?? pinLabel(state?.coinLine, state?.pinType, state?.coinBcm)} ✅</div>
+            <div><span className="font-extrabold text-blue-600 dark:text-blue-400">BLUE</span> → {state?.inhibitPin ?? pinLabel(state?.inhibitLine, state?.pinType, state?.inhibitBcm)} [Inhibit]</div>
           </div>
           <div className="mt-2 text-[10px] font-sans font-semibold text-neutral-500 dark:text-neutral-400 border-t border-black/10 dark:border-white/10 pt-1.5">
             Edge: FALLING · Pull-up: Enabled · Debounce: 0ms (software 300ms pulse-train window) · HIGH = Blocked
@@ -465,10 +472,3 @@ export function CoinDebugger() {
   );
 }
 
-// BCM → Physical lookup used in this component
-const BCM_TO_PHYSICAL: Record<number, number> = {
-  0: 27, 1: 28, 2: 3, 3: 5, 4: 7, 5: 29, 6: 31, 7: 26,
-  8: 24, 9: 21, 10: 19, 11: 23, 12: 32, 13: 33, 14: 8, 15: 10,
-  16: 36, 17: 11, 18: 12, 19: 35, 20: 38, 21: 40, 22: 15, 23: 16,
-  24: 18, 25: 22, 26: 37, 27: 13,
-};

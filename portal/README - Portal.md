@@ -20,8 +20,8 @@ The web portal and administrative control interface for **OpenPisoWifi**, built 
 ### 📊 Admin Dashboard (`/admin` - Default PIN: `1234`)
 - **📈 Revenue Analytics**: Real-time stats on today's revenue, all-time earnings, active sessions, and recent sales logs.
 - **💰 Cash Box Management**: Tracks physical coins in the coin vault, logs collection history with notes, and offers a 1-click empty drawer action.
-- **🛠️ Interactive 40-Pin GPIO Selector**: Visual Linux SBC 40-pin header map in the Settings tab to easily assign COIN and INHIBIT pins, with safety conflict validation and instant hot-reloading.
-- **🩺 Hardware & Coin Debugger (`/admin` Hardware Tab)**: Live diagnostic console displaying slot status (Enabled / Blocked), current BCM pin mapping, live pulse log stream, quick Enable/Block/Clear actions, and JSON log export.
+- **🛠️ Board-neutral GPIO Configuration**: Configure the backend, GPIO chip, and coin/inhibit identifiers. `libgpiod` line offsets are recommended for Orange Pi/Armbian; the explicit `lgpio` option remains available for Raspberry Pi deployments.
+- **🩺 Hardware & Coin Debugger (`/admin` Hardware Tab)**: Live diagnostic console displaying the detected board/backend/chip, active GPIO identifiers, slot status, pulse log stream, quick Enable/Block/Clear actions, and JSON log export.
 - **⚙️ Dynamic Rates & Branding**: Configure minutes-per-peso rates, customizable time preset cards, announcement ticker banner, portal title, Admin PIN, and GPIO pins.
 - **🎫 Batch Voucher Generator**: Generate batches of prepaid voucher codes with custom durations and expiry days, search codes, filter by status, and open a clean printable voucher sheet.
 - **👥 Active Session Manager**: Monitor connected devices in real time with IP/MAC details, add bonus time (`+15m Bonus`), or instantly kick/disconnect.

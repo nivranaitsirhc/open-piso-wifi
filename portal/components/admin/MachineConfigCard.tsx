@@ -19,6 +19,10 @@ import { GpioPinSelector } from '@/components/admin/GpioPinSelector';
 interface MachineConfigCardProps {
   initialSettings: {
     admin_pin: string;
+    gpio_backend?: string;
+    gpio_chip?: string;
+    gpio_coin_line?: string;
+    gpio_inhibit_line?: string;
     coin_gpio_pin?: string;
     inhibit_gpio_pin?: string;
     inhibit_mode?: string;
@@ -30,8 +34,12 @@ interface MachineConfigCardProps {
 export function MachineConfigCard({ initialSettings, onSaveSuccess }: MachineConfigCardProps) {
   const [formData, setFormData] = useState({
     admin_pin: initialSettings.admin_pin || '1234',
-    coin_gpio_pin: initialSettings.coin_gpio_pin || '4',
-    inhibit_gpio_pin: initialSettings.inhibit_gpio_pin || '17',
+    gpio_backend: initialSettings.gpio_backend || (initialSettings.coin_gpio_pin ? 'lgpio' : 'auto'),
+    gpio_chip: initialSettings.gpio_chip || '/dev/gpiochip0',
+    gpio_coin_line: initialSettings.gpio_coin_line || '',
+    gpio_inhibit_line: initialSettings.gpio_inhibit_line || '',
+    coin_gpio_pin: initialSettings.coin_gpio_pin || '',
+    inhibit_gpio_pin: initialSettings.inhibit_gpio_pin || '',
     inhibit_mode: initialSettings.inhibit_mode || 'high',
     coin_slot_timeout_seconds: initialSettings.coin_slot_timeout_seconds || '60',
   });
@@ -54,6 +62,10 @@ export function MachineConfigCard({ initialSettings, onSaveSuccess }: MachineCon
           admin_pin: formData.admin_pin,
           coin_gpio_pin: formData.coin_gpio_pin,
           inhibit_gpio_pin: formData.inhibit_gpio_pin,
+          gpio_backend: formData.gpio_backend,
+          gpio_chip: formData.gpio_chip,
+          gpio_coin_line: formData.gpio_coin_line,
+          gpio_inhibit_line: formData.gpio_inhibit_line,
           inhibit_mode: formData.inhibit_mode,
           coin_slot_timeout_seconds: formData.coin_slot_timeout_seconds,
         }),
@@ -111,17 +123,23 @@ export function MachineConfigCard({ initialSettings, onSaveSuccess }: MachineCon
         <div className="p-4 rounded-xl bg-[#f8f6ee] dark:bg-[#111713] border-2 border-black dark:border-[#4a6052] space-y-4 shadow-neo-sm">
           <div className="flex items-center gap-2 text-xs font-black uppercase text-black dark:text-white font-display">
             <Cpu className="w-4 h-4 text-purple-600 dark:text-purple-400" />
-            <span>Linux SBC GPIO Pin Allocation (BCM Numbering)</span>
+            <span>Board-neutral GPIO Allocation</span>
           </div>
 
           <GpioPinSelector
-            coinBcm={parseInt(formData.coin_gpio_pin || '4', 10)}
-            inhibitBcm={parseInt(formData.inhibit_gpio_pin || '17', 10)}
-            onChange={(coinBcm, inhibitBcm) =>
+            backend={formData.gpio_backend}
+            chip={formData.gpio_chip}
+            coin={formData.gpio_backend === 'gpiod' || formData.gpio_backend === 'auto' ? formData.gpio_coin_line : formData.coin_gpio_pin}
+            inhibit={formData.gpio_backend === 'gpiod' || formData.gpio_backend === 'auto' ? formData.gpio_inhibit_line : formData.inhibit_gpio_pin}
+            onChange={({ backend, chip, coin, inhibit }) =>
               setFormData({
                 ...formData,
-                coin_gpio_pin: String(coinBcm),
-                inhibit_gpio_pin: String(inhibitBcm),
+                gpio_backend: backend,
+                gpio_chip: chip,
+                gpio_coin_line: backend === 'gpiod' || backend === 'auto' ? coin : formData.gpio_coin_line,
+                gpio_inhibit_line: backend === 'gpiod' || backend === 'auto' ? inhibit : formData.gpio_inhibit_line,
+                coin_gpio_pin: backend === 'lgpio' ? coin : formData.coin_gpio_pin,
+                inhibit_gpio_pin: backend === 'lgpio' ? inhibit : formData.inhibit_gpio_pin,
               })
             }
           />

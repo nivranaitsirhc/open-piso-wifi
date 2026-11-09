@@ -60,7 +60,6 @@ CLI_TOKEN=""
 CLI_PORTAL_IP=""
 CLI_ROUTER_IP=""
 CLI_ADMIN_PIN=""
-CLI_COIN_PIN=""
 NON_INTERACTIVE=false
 
 while [[ $# -gt 0 ]]; do
@@ -83,10 +82,6 @@ while [[ $# -gt 0 ]]; do
             ;;
         --admin-pin)
             CLI_ADMIN_PIN="$2"
-            shift 2
-            ;;
-        --coin-pin)
-            CLI_COIN_PIN="$2"
             shift 2
             ;;
         --non-interactive|--yes|-y)
@@ -144,7 +139,10 @@ DEFAULT_DAEMON_PORT="4000"
 DEFAULT_SSH_USER="root"
 DEFAULT_SSH_PORT="22"
 DEFAULT_ROUTER_MODE="fw4_nftables"
-DEFAULT_COIN_PIN="4"
+DEFAULT_GPIO_BACKEND="auto"
+DEFAULT_GPIO_CHIP="/dev/gpiochip0"
+DEFAULT_GPIO_COIN_LINE=""
+DEFAULT_GPIO_INHIBIT_LINE=""
 
 PORTAL_DIR="$ROOT_DIR/portal"
 [ ! -d "$PORTAL_DIR" ] && [ -d "$ROOT_DIR/pisowifi-portal" ] && PORTAL_DIR="$ROOT_DIR/pisowifi-portal"
@@ -188,8 +186,14 @@ if [ -f "$DAEMON_DIR/.env" ]; then
     [ -n "$VAL" ] && DEFAULT_SSH_PORT="$VAL"
     VAL=$(grep -E '^ROUTER_MODE=' "$DAEMON_DIR/.env" | cut -d'=' -f2- | tr -d '"' | tr -d "'" || true)
     [ -n "$VAL" ] && DEFAULT_ROUTER_MODE="$VAL"
-    VAL=$(grep -E '^COIN_GPIO_PIN=' "$DAEMON_DIR/.env" | cut -d'=' -f2- | tr -d '"' | tr -d "'" || true)
-    [ -n "$VAL" ] && DEFAULT_COIN_PIN="$VAL"
+    VAL=$(grep -E '^GPIO_BACKEND=' "$DAEMON_DIR/.env" | cut -d'=' -f2- | tr -d '"' | tr -d "'" || true)
+    [ -n "$VAL" ] && DEFAULT_GPIO_BACKEND="$VAL"
+    VAL=$(grep -E '^GPIO_CHIP=' "$DAEMON_DIR/.env" | cut -d'=' -f2- | tr -d '"' | tr -d "'" || true)
+    [ -n "$VAL" ] && DEFAULT_GPIO_CHIP="$VAL"
+    VAL=$(grep -E '^GPIO_COIN_LINE=' "$DAEMON_DIR/.env" | cut -d'=' -f2- | tr -d '"' | tr -d "'" || true)
+    [ -n "$VAL" ] && DEFAULT_GPIO_COIN_LINE="$VAL"
+    VAL=$(grep -E '^GPIO_INHIBIT_LINE=' "$DAEMON_DIR/.env" | cut -d'=' -f2- | tr -d '"' | tr -d "'" || true)
+    [ -n "$VAL" ] && DEFAULT_GPIO_INHIBIT_LINE="$VAL"
 elif [ -f "$ROOT_DIR/pisowifi-daemon/.env" ]; then
     VAL=$(grep -E '^PORT=' "$ROOT_DIR/pisowifi-daemon/.env" | cut -d'=' -f2- | tr -d '"' | tr -d "'" || true)
     [ -n "$VAL" ] && DEFAULT_DAEMON_PORT="$VAL"
@@ -199,14 +203,19 @@ elif [ -f "$ROOT_DIR/pisowifi-daemon/.env" ]; then
     [ -n "$VAL" ] && DEFAULT_SSH_PORT="$VAL"
     VAL=$(grep -E '^ROUTER_MODE=' "$ROOT_DIR/pisowifi-daemon/.env" | cut -d'=' -f2- | tr -d '"' | tr -d "'" || true)
     [ -n "$VAL" ] && DEFAULT_ROUTER_MODE="$VAL"
-    VAL=$(grep -E '^COIN_GPIO_PIN=' "$ROOT_DIR/pisowifi-daemon/.env" | cut -d'=' -f2- | tr -d '"' | tr -d "'" || true)
-    [ -n "$VAL" ] && DEFAULT_COIN_PIN="$VAL"
+    VAL=$(grep -E '^GPIO_BACKEND=' "$ROOT_DIR/pisowifi-daemon/.env" | cut -d'=' -f2- | tr -d '"' | tr -d "'" || true)
+    [ -n "$VAL" ] && DEFAULT_GPIO_BACKEND="$VAL"
+    VAL=$(grep -E '^GPIO_CHIP=' "$ROOT_DIR/pisowifi-daemon/.env" | cut -d'=' -f2- | tr -d '"' | tr -d "'" || true)
+    [ -n "$VAL" ] && DEFAULT_GPIO_CHIP="$VAL"
+    VAL=$(grep -E '^GPIO_COIN_LINE=' "$ROOT_DIR/pisowifi-daemon/.env" | cut -d'=' -f2- | tr -d '"' | tr -d "'" || true)
+    [ -n "$VAL" ] && DEFAULT_GPIO_COIN_LINE="$VAL"
+    VAL=$(grep -E '^GPIO_INHIBIT_LINE=' "$ROOT_DIR/pisowifi-daemon/.env" | cut -d'=' -f2- | tr -d '"' | tr -d "'" || true)
+    [ -n "$VAL" ] && DEFAULT_GPIO_INHIBIT_LINE="$VAL"
 fi
 
 [ -n "$CLI_PORTAL_IP" ] && DEFAULT_PORTAL_IP="$CLI_PORTAL_IP"
 [ -n "$CLI_ROUTER_IP" ] && DEFAULT_ROUTER_IP="$CLI_ROUTER_IP"
 [ -n "$CLI_ADMIN_PIN" ] && DEFAULT_ADMIN_PIN="$CLI_ADMIN_PIN"
-[ -n "$CLI_COIN_PIN" ] && DEFAULT_COIN_PIN="$CLI_COIN_PIN"
 
 echo -e "${CYAN}==============================================================${NC}"
 echo -e "${GREEN}🚀 Starting OpenPisoWiFi Fast Automated Installation...${NC}"
@@ -224,7 +233,10 @@ DAEMON_PORT="$DEFAULT_DAEMON_PORT"
 ROUTER_SSH_USER="$DEFAULT_SSH_USER"
 ROUTER_SSH_PORT="$DEFAULT_SSH_PORT"
 ROUTER_MODE="$DEFAULT_ROUTER_MODE"
-COIN_GPIO_PIN="$DEFAULT_COIN_PIN"
+GPIO_BACKEND="$DEFAULT_GPIO_BACKEND"
+GPIO_CHIP="$DEFAULT_GPIO_CHIP"
+GPIO_COIN_LINE="$DEFAULT_GPIO_COIN_LINE"
+GPIO_INHIBIT_LINE="$DEFAULT_GPIO_INHIBIT_LINE"
 
 # ------------------------------------------------------------------------------
 # INTERACTIVE TERMINAL DETECTION & INPUT HELPERS
@@ -374,8 +386,11 @@ if [ "$IS_INTERACTIVE" = true ]; then
     # Section C: Hardware Daemon & Coin Acceptor
     echo ""
     echo -e "${PURPLE}[C] Hardware Daemon & Coin Acceptor Settings${NC}"
-    echo -e "  💡 Tip: Coin slot GPIO pin can also be changed anytime in Admin Dashboard Settings."
-    ask_prompt "  • Coin Slot Physical GPIO (can change in admin) [$DEFAULT_COIN_PIN]: " "$DEFAULT_COIN_PIN" COIN_GPIO_PIN
+    echo -e "  💡 Tip: GPIO settings can also be changed anytime in Admin Dashboard Settings."
+    ask_prompt "  • GPIO backend (auto/gpiod/lgpio) [$DEFAULT_GPIO_BACKEND]: " "$DEFAULT_GPIO_BACKEND" GPIO_BACKEND
+    ask_prompt "  • GPIO chip path [$DEFAULT_GPIO_CHIP]: " "$DEFAULT_GPIO_CHIP" GPIO_CHIP
+    ask_prompt "  • Coin GPIO line offset (blank for Raspberry Pi auto) [$DEFAULT_GPIO_COIN_LINE]: " "$DEFAULT_GPIO_COIN_LINE" GPIO_COIN_LINE
+    ask_prompt "  • Inhibit GPIO line offset (blank for Raspberry Pi auto) [$DEFAULT_GPIO_INHIBIT_LINE]: " "$DEFAULT_GPIO_INHIBIT_LINE" GPIO_INHIBIT_LINE
 
     # Section D: Advanced Service Settings
     echo ""
@@ -424,7 +439,8 @@ fi
 echo -e "• Linux SBC LAN IP: ${YELLOW}${PORTAL_IP}:${PORTAL_PORT}${NC}"
 echo -e "• OpenWrt Router:      ${YELLOW}${ROUTER_SSH_USER}@${ROUTER_IP}:${ROUTER_SSH_PORT} (${ROUTER_MODE})${NC}"
 echo -e "• Admin Security PIN:  ${YELLOW}${ADMIN_PIN}${NC}"
-echo -e "• Coin Slot GPIO:      ${YELLOW}GPIO ${COIN_GPIO_PIN}${NC} (changeable in Admin)"
+echo -e "• GPIO Backend:        ${YELLOW}${GPIO_BACKEND}${NC} (chip ${GPIO_CHIP})"
+echo -e "• GPIO Lines:          ${YELLOW}coin=${GPIO_COIN_LINE:-auto} inhibit=${GPIO_INHIBIT_LINE:-auto}${NC} (changeable in Admin)"
 echo -e "• Daemon Port:         ${YELLOW}${DAEMON_PORT}${NC}"
 echo ""
 
@@ -797,7 +813,10 @@ ROUTER_SSH_PORT=${ROUTER_SSH_PORT}
 ROUTER_SSH_USER=${ROUTER_SSH_USER}
 ROUTER_SSH_KEY_PATH=/root/.ssh/id_rsa
 ROUTER_MODE=${ROUTER_MODE}
-COIN_GPIO_PIN=${COIN_GPIO_PIN}
+GPIO_BACKEND=${GPIO_BACKEND}
+GPIO_CHIP=${GPIO_CHIP}
+GPIO_COIN_LINE=${GPIO_COIN_LINE}
+GPIO_INHIBIT_LINE=${GPIO_INHIBIT_LINE}
 EOF
 
 if [ -n "$GITHUB_TOKEN" ]; then

@@ -83,7 +83,11 @@ interface CoinEvent {
   timestamp: number;
   type: 'pulse' | 'coin_detected' | 'slot_enabled' | 'slot_disabled' | 'inhibit_timeout' | 'error' | 'outage' | 'button_pressed';
   value?: number;         // peso value for 'coin_detected'
+  /** Legacy Raspberry Pi BCM identifier, retained for old clients. */
   bcmPin?: number;
+  /** Board-neutral GPIO identifier used by the active backend. */
+  gpioPin?: number;
+  gpioPinType?: 'line' | 'bcm';
   rawPulseCount?: number; // how many pulses in the completed train
   trainMs?: number;       // duration of the pulse train in ms
   breakdown?: number[];   // constituent coin values e.g. [20, 5]
@@ -182,13 +186,71 @@ function resolvePin(val: number): { bcm: number; physical: number } {
   return { bcm: val, physical: val };
 }
 
+function detectBoardModel(): string {
+  try {
+    return fs.readFileSync('/proc/device-tree/model', 'utf8').replace(/\0/g, '').trim() || 'Unknown Linux SBC';
+  } catch {
+    return 'Unknown Linux SBC';
+  }
+}
+
+function describeGpioPin(value: number, pinType: 'line' | 'bcm'): {
+  gpioPin: number;
+  gpioPinType: 'line' | 'bcm';
+  line?: number;
+  bcm?: number;
+  physical?: number;
+  label: string;
+} {
+  if (value < 0) {
+    return { gpioPin: value, gpioPinType: pinType, label: 'unconfigured' };
+  }
+  if (pinType === 'line') {
+    return { gpioPin: value, gpioPinType: 'line' as const, line: value, label: `line ${value}` };
+  }
+  const resolved = resolvePin(value);
+  return { gpioPin: resolved.bcm, gpioPinType: 'bcm' as const, bcm: resolved.bcm, physical: resolved.physical, label: `BCM ${resolved.bcm}` };
+}
+
+function gpioResponse() {
+  const coin = describeGpioPin(activeCoinPin, activePinType);
+  const inhibit = describeGpioPin(activeInhibitPin, activePinType);
+  return {
+    backend: activeGpioBackend,
+    boardModel: activeBoardModel,
+    gpioChip: activePinType === 'line' ? activeGpioChip : undefined,
+    pinType: activePinType,
+    coinPin: coin.label,
+    inhibitPin: inhibit.label,
+    coinLine: coin.line,
+    inhibitLine: inhibit.line,
+    coinBcm: coin.bcm,
+    inhibitBcm: inhibit.bcm,
+    coinPhysical: coin.physical,
+    inhibitPhysical: inhibit.physical,
+  };
+}
+
 // --- GPIO pin references (Physical Pin 7 for Coin, Physical Pin 11 for Inhibit, Physical Pin 5 for Button) ---
 const initialCoin = resolvePin(process.env.COIN_GPIO_PIN ? parseInt(process.env.COIN_GPIO_PIN, 10) : 7);
 const initialInhibit = resolvePin(process.env.INHIBIT_GPIO_PIN ? parseInt(process.env.INHIBIT_GPIO_PIN, 10) : 11);
 const initialButton = resolvePin(process.env.BUTTON_GPIO_PIN ? parseInt(process.env.BUTTON_GPIO_PIN, 10) : 5);
-let activeCoinBcm = initialCoin.bcm;
-let activeInhibitBcm = initialInhibit.bcm;
+const initialBoardModel = detectBoardModel();
+const initialIsRaspberryPi = initialBoardModel.toLowerCase().includes('raspberry pi');
+const initialUsesGpiod = Boolean(process.env.GPIO_COIN_LINE && process.env.GPIO_INHIBIT_LINE) ||
+  process.env.GPIO_BACKEND === 'gpiod' ||
+  (!initialIsRaspberryPi && (process.env.GPIO_BACKEND || 'auto') === 'auto');
+let activePinType: 'line' | 'bcm' = initialUsesGpiod ? 'line' : 'bcm';
+let activeCoinPin = initialUsesGpiod
+  ? parseInt(process.env.GPIO_COIN_LINE || '-1', 10)
+  : initialCoin.bcm;
+let activeInhibitPin = initialUsesGpiod
+  ? parseInt(process.env.GPIO_INHIBIT_LINE || '-1', 10)
+  : initialInhibit.bcm;
 let activeButtonBcm = initialButton.bcm;
+let activeGpioBackend = process.env.GPIO_BACKEND || 'auto';
+let activeGpioChip = process.env.GPIO_CHIP || '/dev/gpiochip0';
+let activeBoardModel = initialBoardModel;
 const coinSlotTimeoutSeconds = process.env.COIN_SLOT_TIMEOUT_SECONDS
   ? parseInt(process.env.COIN_SLOT_TIMEOUT_SECONDS, 10)
   : 90;
@@ -332,7 +394,7 @@ let bridgeProcess: ChildProcess | null = null;
 let trainPulses: number[] = [];
 let trainTimer: ReturnType<typeof setTimeout> | null = null;
 
-function handleIncomingPulse(bcmPin: number) {
+function handleIncomingPulse(gpioPin: number) {
   const now = Date.now();
   
   // 1. Immediately credit 1 pulse = 1 peso in real-time (no delay!)
@@ -343,8 +405,8 @@ function handleIncomingPulse(bcmPin: number) {
   resetAutoDisableTimer();
 
   // 3. Log real-time pulse event
-  logCoinEvent({ timestamp: now, type: 'pulse', bcmPin, value: 1 });
-  console.log(`[GPIO] ⚡ PULSE DETECTED on BCM ${bcmPin} -> pendingCoins: ₱${pendingCoins}`);
+  logCoinEvent({ timestamp: now, type: 'pulse', gpioPin, gpioPinType: activePinType, ...(activePinType === 'bcm' ? { bcmPin: gpioPin } : {}), value: 1 });
+  console.log(`[GPIO] ⚡ PULSE DETECTED on ${activePinType} ${gpioPin} -> pendingCoins: ₱${pendingCoins}`);
 
   // 4. Background train tracking for stats & diagnostics (purely telemetry)
   trainPulses.push(now);
@@ -371,7 +433,9 @@ function handleIncomingPulse(bcmPin: number) {
       timestamp: Date.now(),
       type: 'coin_detected',
       value: pulseCount,
-      bcmPin,
+      gpioPin,
+      gpioPinType: activePinType,
+      ...(activePinType === 'bcm' ? { bcmPin: gpioPin } : {}),
       rawPulseCount: pulseCount,
       trainMs,
       breakdown,
@@ -424,8 +488,8 @@ export async function enableCoinSlot(force = false): Promise<boolean> {
   }
   coinSlotEnabled = true;
   setInhibitPin(false); // slot accepting
-  logCoinEvent({ timestamp: Date.now(), type: 'slot_enabled', bcmPin: activeInhibitBcm });
-  console.log(`[INHIBIT] Coin slot ENABLED (BCM ${activeInhibitBcm} → ACCEPT). Auto-disable in ${coinSlotTimeoutSeconds}s.`);
+  logCoinEvent({ timestamp: Date.now(), type: 'slot_enabled', gpioPin: activeInhibitPin, gpioPinType: activePinType, ...(activePinType === 'bcm' ? { bcmPin: activeInhibitPin } : {}) });
+  console.log(`[INHIBIT] Coin slot ENABLED (${activePinType} ${activeInhibitPin} → ACCEPT). Auto-disable in ${coinSlotTimeoutSeconds}s.`);
   resetAutoDisableTimer();
   return true;
 }
@@ -438,8 +502,8 @@ export function disableCoinSlot(reason: 'manual' | 'timeout' | 'outage' = 'manua
   setInhibitPin(true); // slot blocked
   if (autoDisableTimer) { clearTimeout(autoDisableTimer); autoDisableTimer = null; }
   const type = reason === 'timeout' ? 'inhibit_timeout' : (reason === 'outage' ? 'outage' : 'slot_disabled');
-  logCoinEvent({ timestamp: Date.now(), type, bcmPin: activeInhibitBcm });
-  console.log(`[INHIBIT] Coin slot DISABLED (BCM ${activeInhibitBcm} → BLOCKED). Reason: ${reason}.`);
+  logCoinEvent({ timestamp: Date.now(), type, gpioPin: activeInhibitPin, gpioPinType: activePinType, ...(activePinType === 'bcm' ? { bcmPin: activeInhibitPin } : {}) });
+  console.log(`[INHIBIT] Coin slot DISABLED (${activePinType} ${activeInhibitPin} → BLOCKED). Reason: ${reason}.`);
 }
 
 function resetAutoDisableTimer() {
@@ -453,7 +517,7 @@ function resetAutoDisableTimer() {
 /**
  * Try initializing hardware via the Python GPIO bridge (lgpio or gpiod).
  */
-function tryInitPythonBridge(coinBcm: number, inhibitBcm: number): Promise<boolean> {
+function tryInitPythonBridge(coinPin: number, inhibitPin: number, pinType: 'line' | 'bcm'): Promise<boolean> {
   return new Promise((resolve) => {
     if (bridgeProcess) {
       try { bridgeProcess.stdin?.write('quit\n'); bridgeProcess.kill('SIGTERM'); } catch {}
@@ -474,14 +538,30 @@ function tryInitPythonBridge(coinBcm: number, inhibitBcm: number): Promise<boole
     }
 
     try {
-      console.log(`[GPIO] Spawning Python GPIO bridge: ${scriptPath} ${coinBcm} ${inhibitBcm} ${inhibitActiveHigh}`);
+      const bridgeEnv = { ...process.env };
+      if (pinType === 'line') {
+        bridgeEnv.GPIO_BACKEND = 'gpiod';
+        bridgeEnv.GPIO_CHIP = activeGpioChip;
+        bridgeEnv.GPIO_COIN_LINE = String(coinPin);
+        bridgeEnv.GPIO_INHIBIT_LINE = String(inhibitPin);
+        bridgeEnv.GPIO_COIN_LABEL = `line ${coinPin}`;
+        bridgeEnv.GPIO_INHIBIT_LABEL = `line ${inhibitPin}`;
+      } else {
+        // A BCM/physical configuration cannot be interpreted as a gpiod line.
+        // Keep the legacy path explicit instead of risking the wrong output,
+        // including when the host's default backend is "auto".
+        bridgeEnv.GPIO_BACKEND = 'lgpio';
+        delete bridgeEnv.GPIO_COIN_LINE;
+        delete bridgeEnv.GPIO_INHIBIT_LINE;
+      }
+      console.log(`[GPIO] Spawning Python GPIO bridge: ${scriptPath} ${coinPin} ${inhibitPin} ${inhibitActiveHigh} (${pinType})`);
       const proc = spawn('python3', [
         '-u',
         scriptPath,
-        String(coinBcm),
-        String(inhibitBcm),
+        String(coinPin),
+        String(inhibitPin),
         String(inhibitActiveHigh),
-      ], { stdio: ['pipe', 'pipe', 'inherit'] });
+      ], { stdio: ['pipe', 'pipe', 'inherit'], env: bridgeEnv });
 
       let resolved = false;
       let pythonStdoutBuffer = '';
@@ -496,13 +576,19 @@ function tryInitPythonBridge(coinBcm: number, inhibitBcm: number): Promise<boole
           const line = rawLine.trim();
           if (!line) continue;
           if (line === 'PULSE') {
-            handleIncomingPulse(coinBcm);
+            handleIncomingPulse(coinPin);
           } else if (line.startsWith('{')) {
             try {
               const msg = JSON.parse(line);
               if (msg.status === 'ready') {
                 bridgeProcess = proc;
-                console.log(`[GPIO] Python bridge connected and ready! (backend: ${msg.backend || 'auto'}, Coin: ${coinBcm}, Inhibit: ${inhibitBcm}, activeHigh: ${inhibitActiveHigh})`);
+                activeGpioBackend = msg.backend || 'auto';
+                activeGpioChip = msg.gpioChip || activeGpioChip;
+                activeBoardModel = msg.boardModel || activeBoardModel;
+                activePinType = msg.backend === 'gpiod' ? 'line' : 'bcm';
+                activeCoinPin = msg.backend === 'gpiod' ? (msg.coinLine ?? coinPin) : (msg.coinBcm ?? coinPin);
+                activeInhibitPin = msg.backend === 'gpiod' ? (msg.inhibitLine ?? inhibitPin) : (msg.inhibitBcm ?? inhibitPin);
+                console.log(`[GPIO] Python bridge connected and ready! (backend: ${activeGpioBackend}, Coin: ${activePinType} ${activeCoinPin}, Inhibit: ${activePinType} ${activeInhibitPin}, activeHigh: ${inhibitActiveHigh})`);
                 setInhibitPin(!coinSlotEnabled);
                 if (!resolved) {
                   resolved = true;
@@ -568,7 +654,7 @@ async function tryInitOnoff(coinBcm: number, inhibitBcm: number): Promise<boolea
     coinGpio = new Gpio(coinBcm, 'in', 'falling', { debounceTimeout: 0 });
     coinGpio.watch((err: Error | null | undefined) => {
       if (err) {
-        logCoinEvent({ timestamp: Date.now(), type: 'error', bcmPin: coinBcm });
+        logCoinEvent({ timestamp: Date.now(), type: 'error', bcmPin: coinBcm, gpioPin: coinBcm, gpioPinType: 'bcm' });
         console.error('[GPIO] onoff watch error:', err);
         return;
       }
@@ -587,36 +673,53 @@ async function tryInitOnoff(coinBcm: number, inhibitBcm: number): Promise<boolea
  * Initialize (or re-initialize) coin + inhibit GPIO pins.
  * Called on startup and when /api/gpio/config is posted.
  */
-async function initGpio(coinBcm: number, inhibitBcm: number) {
+async function initGpio(coinPin: number, inhibitPin: number, pinType: 'line' | 'bcm' = activePinType) {
   if (process.platform !== 'linux') {
     lastGpioError = `Running on ${process.platform} (Non-Linux): Hardware GPIO disabled, Simulation mode active.`;
     console.log(`[GPIO] ${lastGpioError}`);
     return;
   }
 
+  if (pinType === 'line' && (coinPin < 0 || inhibitPin < 0)) {
+    isHardwareGpioAvailable = false;
+    lastGpioError = 'GPIO line offsets are not configured. Discover them with gpioinfo on the target SBC, then set GPIO_COIN_LINE and GPIO_INHIBIT_LINE (or use Admin → Machine Settings).';
+    console.warn(`[GPIO] ${lastGpioError}`);
+    return;
+  }
+
   // 1. Primary: Python GPIO bridge (lgpio on Raspberry Pi, gpiod on Orange Pi/Armbian)
-  const pythonOk = await tryInitPythonBridge(coinBcm, inhibitBcm);
+  const pythonOk = await tryInitPythonBridge(coinPin, inhibitPin, pinType);
   if (pythonOk) {
-    activeCoinBcm = coinBcm;
-    activeInhibitBcm = inhibitBcm;
+    activeCoinPin = pinType === 'line' ? coinPin : resolvePin(coinPin).bcm;
+    activeInhibitPin = pinType === 'line' ? inhibitPin : resolvePin(inhibitPin).bcm;
+    activePinType = pinType;
     isHardwareGpioAvailable = true;
     lastGpioError = null;
     return;
   }
 
   // 2. Secondary: Fallback to onoff for older systems
-  const onoffOk = await tryInitOnoff(coinBcm, inhibitBcm);
+  if (pinType === 'line') {
+    isHardwareGpioAvailable = false;
+    if (!lastGpioError) lastGpioError = 'The gpiod bridge could not access the configured GPIO lines.';
+    console.warn(`[GPIO] Hardware GPIO unavailable: ${lastGpioError}`);
+    return;
+  }
+
+  const onoffOk = await tryInitOnoff(coinPin, inhibitPin);
   if (onoffOk) {
-    activeCoinBcm = coinBcm;
-    activeInhibitBcm = inhibitBcm;
+    activeCoinPin = resolvePin(coinPin).bcm;
+    activeInhibitPin = resolvePin(inhibitPin).bcm;
+    activePinType = 'bcm';
     isHardwareGpioAvailable = true;
     lastGpioError = null;
     return;
   }
 
   // Both failed
-  activeCoinBcm = coinBcm;
-  activeInhibitBcm = inhibitBcm;
+  activeCoinPin = coinPin;
+  activeInhibitPin = inhibitPin;
+  activePinType = pinType;
   isHardwareGpioAvailable = false;
   if (!lastGpioError) {
     lastGpioError = 'GPIO initialization failed. Install python3-gpiod (Orange Pi) or python3-gpiozero/python3-lgpio (Raspberry Pi) via apt.';
@@ -625,7 +728,7 @@ async function initGpio(coinBcm: number, inhibitBcm: number) {
 }
 
 // Boot initialization
-await initGpio(activeCoinBcm, activeInhibitBcm);
+await initGpio(activeCoinPin, activeInhibitPin, activePinType);
 
 // -------------------------------------------------------------
 // DAEMON STATUS & VERSION API
@@ -656,6 +759,7 @@ app.get('/api/version', (_req: Request, res: Response) => {
     platform: `${process.platform} (${process.arch})`,
     uptime: Math.floor(process.uptime()),
     gpioAvailable: isHardwareGpioAvailable,
+    ...gpioResponse(),
     online: true,
   });
 });
@@ -676,9 +780,6 @@ app.get('/api/coins', (req: Request, res: Response) => {
     slotEnabled = slot.status === 'unlocked';
   }
 
-  const coin = resolvePin(activeCoinBcm);
-  const inhibit = resolvePin(activeInhibitBcm);
-  const button = resolvePin(activeButtonBcm);
   res.json({
     pulses,
     gpioAvailable: isHardwareGpioAvailable,
@@ -686,12 +787,9 @@ app.get('/api/coins', (req: Request, res: Response) => {
     isWanOnline,
     slotId,
     activeSlots: satelliteCoinslots.size + (isHardwareGpioAvailable ? 1 : 0),
-    coinPin: coin.physical,
-    inhibitPin: inhibit.physical,
-    buttonPin: button.physical,
-    coinBcm: coin.bcm,
-    inhibitBcm: inhibit.bcm,
-    buttonBcm: button.bcm,
+    ...gpioResponse(),
+    buttonPin: activeButtonBcm,
+    buttonBcm: activeButtonBcm,
   });
 });
 
@@ -795,8 +893,7 @@ app.post('/api/coins/enable', async (req: Request<{}, {}, { force?: boolean; slo
   }
 
   const ok = await enableCoinSlot(force);
-  const coin = resolvePin(activeCoinBcm);
-  const inhibit = resolvePin(activeInhibitBcm);
+  const gpio = gpioResponse();
   if (!ok) {
     return res.status(503).json({
       success: false,
@@ -804,20 +901,14 @@ app.post('/api/coins/enable', async (req: Request<{}, {}, { force?: boolean; slo
       message: 'Internet connection is unavailable. Coinslot temporarily disabled to prevent coin loss.',
       coinSlotEnabled: false,
       isWanOnline: false,
-      coinPin: coin.physical,
-      inhibitPin: inhibit.physical,
-      coinBcm: coin.bcm,
-      inhibitBcm: inhibit.bcm,
+      ...gpio,
     });
   }
   res.json({
     success: true,
     coinSlotEnabled: true,
     isWanOnline: true,
-    coinPin: coin.physical,
-    inhibitPin: inhibit.physical,
-    coinBcm: coin.bcm,
-    inhibitBcm: inhibit.bcm,
+    ...gpio,
   });
 });
 
@@ -958,20 +1049,43 @@ app.get('/api/telegram/status', (_req: Request, res: Response) => {
 });
 
 // Hot-reload GPIO pin config without daemon restart
-app.post('/api/gpio/config', async (req: Request<{}, {}, { coinPin?: number; inhibitPin?: number; buttonPin?: number; inhibitActiveHigh?: boolean }>, res: Response) => {
-  const coin = resolvePin(req.body.coinPin ?? activeCoinBcm);
-  const inhibit = resolvePin(req.body.inhibitPin ?? activeInhibitBcm);
-  const button = resolvePin(req.body.buttonPin ?? activeButtonBcm);
+app.post('/api/gpio/config', async (req: Request<{}, {}, {
+  coinLine?: number;
+  inhibitLine?: number;
+  coinPin?: number; // legacy BCM/physical alias
+  inhibitPin?: number; // legacy BCM/physical alias
+  buttonPin?: number;
+  gpioBackend?: string;
+  gpioChip?: string;
+  gpioPinType?: 'line' | 'bcm';
+  inhibitActiveHigh?: boolean;
+}>, res: Response) => {
+  const useLines = req.body.gpioPinType === 'line' || req.body.coinLine !== undefined || req.body.inhibitLine !== undefined;
+  const pinType: 'line' | 'bcm' = useLines ? 'line' : 'bcm';
+  const coinValue = useLines
+    ? (req.body.coinLine ?? activeCoinPin)
+    : resolvePin(req.body.coinPin ?? activeCoinPin).bcm;
+  const inhibitValue = useLines
+    ? (req.body.inhibitLine ?? activeInhibitPin)
+    : resolvePin(req.body.inhibitPin ?? activeInhibitPin).bcm;
+  if (!Number.isInteger(coinValue) || coinValue < 0 || !Number.isInteger(inhibitValue) || inhibitValue < 0) {
+    return res.status(400).json({ success: false, error: 'GPIO identifiers must be non-negative integers.' });
+  }
 
   if (typeof req.body.inhibitActiveHigh === 'boolean') {
     inhibitActiveHigh = req.body.inhibitActiveHigh;
   }
 
-  activeButtonBcm = button.bcm;
-  console.log(`[GPIO] Hot-reload requested: Coin Pin ${coin.physical} (BCM ${coin.bcm}), Inhibit Pin ${inhibit.physical} (BCM ${inhibit.bcm}), Button Pin ${button.physical} (BCM ${button.bcm}), activeHigh=${inhibitActiveHigh}`);
-  await initGpio(coin.bcm, inhibit.bcm);
+  if (req.body.gpioBackend) activeGpioBackend = req.body.gpioBackend;
+  if (req.body.gpioChip) activeGpioChip = req.body.gpioChip;
+  activePinType = pinType;
+  activeCoinPin = coinValue;
+  activeInhibitPin = inhibitValue;
+  if (req.body.buttonPin !== undefined) activeButtonBcm = resolvePin(req.body.buttonPin).bcm;
+  console.log(`[GPIO] Hot-reload requested: Coin ${pinType} ${coinValue}, Inhibit ${pinType} ${inhibitValue}, Chip ${activeGpioChip}, activeHigh=${inhibitActiveHigh}`);
+  await initGpio(coinValue, inhibitValue, pinType);
   setInhibitPin(!coinSlotEnabled);
-  res.json({ success: true, coinPin: coin.physical, inhibitPin: inhibit.physical, buttonPin: button.physical, coinBcm: coin.bcm, inhibitBcm: inhibit.bcm, buttonBcm: button.bcm, inhibitActiveHigh });
+  res.json({ success: true, ...gpioResponse(), buttonBcm: activeButtonBcm, inhibitActiveHigh });
 });
 
 // Hardware debug endpoint: returns event log, current state, denomination stats
@@ -988,18 +1102,12 @@ app.get('/api/hardware/debug', (_req: Request, res: Response) => {
     };
   }
 
-  const coin = resolvePin(activeCoinBcm);
-  const inhibit = resolvePin(activeInhibitBcm);
-
   res.json({
     events: [...coinEventLog],
     currentState: {
       coinSlotEnabled,
       pendingCoins,
-      coinPin: coin.physical,
-      inhibitPin: inhibit.physical,
-      coinBcm: coin.bcm,
-      inhibitBcm: inhibit.bcm,
+      ...gpioResponse(),
       inhibitActiveHigh,
       gpioAvailable: isHardwareGpioAvailable,
       lastGpioError,

@@ -1,6 +1,6 @@
 # ⚡ OpenPisoWifi - Hardware Daemon & Router Controller
 
-A lightweight, high-performance background daemon for **OpenPisoWifi** running on **Node.js (tsx) / Bun**. It directly interfaces with physical multi-coin acceptor slots (CL168, Allan 1239A, HX-616) via **Raspberry Pi GPIO** with active **Inhibit gating** and manages client internet access, Wi-Fi radios, QoS speed limits, and firewall security on a remote **Ruijie RG-EW1200G Pro OpenWrt Router** over SSH.
+A lightweight, high-performance background daemon for **OpenPisoWifi** running on **Node.js (tsx) / Bun**. It directly interfaces with physical multi-coin acceptor slots (CL168, Allan 1239A, HX-616) through a board-neutral GPIO abstraction with active **Inhibit gating** and manages client internet access, Wi-Fi radios, QoS speed limits, and firewall security on a remote **Ruijie RG-EW1200G Pro OpenWrt Router** over SSH.
 
 ---
 
@@ -8,7 +8,7 @@ A lightweight, high-performance background daemon for **OpenPisoWifi** running o
 
 - **🪙 Multi-Coin Pulse Train Aggregation**: Detects falling-edge GPIO pulses for multi-denomination coins (₱1, ₱5, ₱10, ₱20) using a 300ms software collection window. 1 pulse = ₱1, 5 pulses = ₱5, 10 pulses = ₱10, 20 pulses = ₱20.
 - **🔒 Active Inhibit Pin Gating**: Starts with the coin slot **physically blocked** (Inhibit pin `HIGH`) on boot to prevent unauthorized coin insertion before the customer requests access. Pulls `LOW` when the customer clicks **"Insert Coin"** on the captive portal, and automatically re-blocks on timeout (default 90s) or balance clear.
-- **🛠️ Dynamic GPIO Pinout & Hot-Reload**: Allows changing both COIN and INHIBIT BCM pins at runtime via `/api/gpio/config` or directly from the Admin Web Portal without stopping or restarting the daemon.
+- **🛠️ Board-neutral GPIO & Hot-Reload**: Uses libgpiod chip/line offsets on non-Raspberry-Pi SBCs, supports libgpiod v1 and v2, reports the detected board/backend, and retains an explicit gpiozero/lgpio path for Raspberry Pi compatibility.
 - **🩺 Live Hardware Telemetry & Pulse Logging**: Records a rolling window of hardware events (pulses, coin drop detections, inhibit state changes) accessible via `/api/hardware/debug` for real-time monitoring and verification.
 - **🛡 Remote OpenWrt `nftables` Firewall Control**: Automatically adds authorized client MAC addresses into the dedicated `piso_portal` table (`piso_auth` timeout set) on OpenWrt via SSH, revoking access immediately when a session expires.
 - **📡 Dual-Band Wi-Fi Management**: Reads and updates 2.4GHz & 5GHz SSIDs, channels, and security settings on OpenWrt via UCI commands.
@@ -43,7 +43,7 @@ Multi-coin acceptors (e.g., **CL168**, **Allan 1239A**, **HX-616**) require a **
   +---------------------------------------------------------+
 ```
 
-### Pin Mapping Reference:
+### Wiring reference:
 | Function | Raspberry Pi Physical Pin | BCM Number (Software) | WiringPi Number | Description / Logic |
 | :--- | :--- | :--- | :--- | :--- |
 | **COIN Input** | **Pin 3** | **BCM 2** (SDA1) | GPIO 8 | Falling-edge pulse train (300ms window) |
@@ -69,10 +69,13 @@ ROUTER_SSH_USER=root
 ROUTER_SSH_KEY_PATH=/root/.ssh/id_rsa
 ROUTER_MODE=fw4_nftables
 
-# Hardware GPIO Configuration (BCM Numbering)
-# Default: Coin = BCM 2 (Physical Pin 3), Inhibit = BCM 3 (Physical Pin 5)
-COIN_GPIO_PIN=2
-INHIBIT_GPIO_PIN=3
+# Board-neutral GPIO configuration (recommended for Orange Pi/Armbian).
+GPIO_BACKEND=gpiod
+GPIO_CHIP=/dev/gpiochip0
+GPIO_COIN_LINE=<verified-coin-line-offset>
+GPIO_INHIBIT_LINE=<verified-inhibit-line-offset>
+# For an existing Raspberry Pi lgpio setup, use GPIO_BACKEND=lgpio and
+# configure COIN_GPIO_PIN/INHIBIT_GPIO_PIN as BCM identifiers.
 INHIBIT_ACTIVE_HIGH=true
 ```
 
@@ -110,7 +113,7 @@ bun run dev
 | `/api/coins/simulate` | `POST` | `{ amount?: number, pulses?: number }` | Injects simulated coin pulses into the counter |
 | `/api/coins/clear` | `POST` | — | Resets pending coin pulse counter to 0 and re-locks slot |
 | `/api/inhibit` | `POST` | `{ enabled: boolean }` | Unlocks (`enabled: true`) or blocks (`enabled: false`) the physical coin slot |
-| `/api/gpio/config` | `POST` | `{ coinPin?: number, inhibitPin?: number }` | Dynamically changes and reinitializes GPIO BCM pins at runtime |
+| `/api/gpio/config` | `POST` | `{ gpioPinType: 'line' | 'bcm', coinLine?/coinPin?, inhibitLine?/inhibitPin?, gpioChip? }` | Dynamically changes and reinitializes board-neutral GPIO identifiers at runtime |
 | `/api/hardware/debug` | `GET` | — | Returns live hardware state, slot status, pending coins, active pins, and event log |
 | `/api/hardware/debug/clear` | `POST` | — | Clears all recorded hardware event log entries |
 

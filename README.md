@@ -45,7 +45,7 @@ By utilizing native Linux `nftables` sets with kernel-level expiry timeouts, int
 ### 💻 Admin Dashboard (`/admin` - Default PIN: `1234`)
 - **📈 Real-Time Revenue Analytics**: Live sales metrics, today's income, all-time earnings, and active session counts.
 - **💰 Cash Box Auditing**: Live coin vault tracker with collection audit logging and one-click cash drawer reset.
-- **🛠️ Interactive 40-Pin GPIO Pinout Selector**: Visual 40-pin Linux SBC pinout diagram in Settings to easily configure COIN and INHIBIT pins with safety alerts for reserved pins (I2C/SPI/UART) and real-time hot-reloading.
+- **🛠️ Board-neutral GPIO Configuration**: Configure the GPIO backend, chip, and coin/inhibit identifiers in Settings. libgpiod line offsets are recommended for Orange Pi/Armbian; the explicit Raspberry Pi lgpio path remains supported.
 - **🩺 Hardware & Coin Debugger (`/admin` Hardware Tab)**: Dedicated diagnostic console to monitor live coin pulses, verify multi-coin detection (₱1, ₱5, ₱10, ₱20), toggle Inhibit states (Enable/Block), clear pulse counters, and export logs as JSON.
 - **👥 Active Session Manager**: Real-time table of connected customers with IP, MAC, remaining time, pause state, bonus time addition (`+15m`), and kick/disconnect controls.
 - **🛡️ Device Manager (VIP Whitelist & Blacklist)**:
@@ -75,7 +75,7 @@ The architecture leaves the OpenWrt router address untouched while providing sea
 | Device | Role | IP Address | Description |
 | :--- | :--- | :--- | :--- |
 | **Ruijie RG-EW1200G Pro** | OpenWrt Gateway & AP | **`192.168.1.1`** (Untouched) | Dual-band AP (2.4GHz & 5GHz), DHCP server, dedicated `nftables` captive firewall & dnsmasq domain host |
-| **Linux SBC** | Paywall & Hardware Daemon | **`192.168.1.240`** | Next.js 16 Web Portal (:3000), Hardware Daemon (:4000), Smart Coin Slot & Inhibit Control (Default: PIN 3 / BCM 2 Coin, PIN 5 / BCM 3 Inhibit) |
+| **Linux SBC** | Paywall & Hardware Daemon | **`192.168.1.240`** | Next.js 16 Web Portal (:3000), Hardware Daemon (:4000), Smart Coin Slot & Inhibit Control (board-specific GPIO configuration) |
 | **Wi-Fi Clients** | Smartphones / Laptops | `192.168.1.10 - 192.168.1.230` | Dynamic DHCP clients connecting to open Wi-Fi SSIDs |
 
 ---
@@ -107,8 +107,8 @@ graph TD
         DB[("SQLite DB with WAL Mode")]
         Admin["💻 Admin Dashboard :3000/admin"]
         
-        CoinSlot -->|"Pulse Line: PIN 3 / BCM 2"| Daemon
-        Daemon -->|"Inhibit Line: PIN 5 / BCM 3 HIGH=Block, LOW=Accept"| CoinSlot
+        CoinSlot -->|"Pulse Line: configured board GPIO"| Daemon
+        Daemon -->|"Inhibit Line: configured GPIO HIGH=Block, LOW=Accept"| CoinSlot
         Portal -->|"Polls Coins / Auth API / Inhibit"| Daemon
         DB --> Portal
         Daemon -->|"SSH Dropbear Commands"| FW
@@ -130,6 +130,8 @@ graph TD
 ## 🔌 Hardware Wiring Diagram (Linux SBC GPIO)
 
 Multi-coin acceptors (e.g. **CL168**, **Allan 1239A**, **HX-616**) operate on **12V DC** power supply. The Linux SBC controls the slot via **Coin Signal (Input)** and **Inhibit Line (Output)**.
+
+The wiring sketch below is a Raspberry Pi example only. Other SBCs must use their own signal-safe header wiring and libgpiod line offsets; do not copy its physical-to-BCM mapping.
 
 > [!CAUTION]
 > **Voltage Protection & Common Ground!**  
@@ -158,12 +160,12 @@ Multi-coin acceptors (e.g. **CL168**, **Allan 1239A**, **HX-616**) operate on **
 ### Pin Mapping Reference:
 | Function | Linux SBC Physical Pin | BCM Number (Software) | WiringPi Number | Description / Logic |
 | :--- | :--- | :--- | :--- | :--- |
-| **COIN Input** | **Pin 3** | **BCM 2** (SDA1) | GPIO 8 | Falling-edge pulse train (300ms window) |
-| **INHIBIT Output**| **Pin 5** | **BCM 3** (SCL1) | GPIO 9 | `HIGH` = Slot Blocked, `LOW` = Slot Accepts Coins |
+| **COIN Input** | Target-board signal pin | libgpiod line offset or legacy BCM | — | Falling-edge pulse train (300ms window) |
+| **INHIBIT Output**| Target-board signal pin | libgpiod line offset or legacy BCM | — | `HIGH` = Slot Blocked, `LOW` = Slot Accepts Coins |
 | **Ground (GND)** | **Pin 6 / 9 / 14 / 20 / 39**| GND | GND | Common ground reference with 12V PSU |
 
 > [!NOTE]
-> Pins are fully configurable in the **Admin Settings** (`/admin`) using the **Interactive 40-Pin GPIO Selector**, without needing to edit code or reboot.
+> GPIO identifiers are configurable in **Admin Settings** (`/admin`) without editing code or rebooting. For libgpiod, verify chip and line offsets on the target board with `gpioinfo`.
 
 ### Physical Cabling:
 1. **WAN Port (Ruijie Router)**: Connect Ethernet cable to your ISP modem / Fiber ONU.
@@ -390,8 +392,8 @@ The daemon runs on port `4000` and provides a comprehensive REST interface:
 | `POST` | `/api/coins/simulate` | Inject test coin pulses (dev mode) | Body: `{ amount?: number, pulses?: number }` |
 | `POST` | `/api/coins/clear` | Clear pending pulses after crediting | `{ success: true, pulses: 0 }` |
 | `POST` | `/api/inhibit` | Enable or block coin slot hardware | Body: `{ enabled: boolean }` |
-| `POST` | `/api/gpio/config` | Hot-reload COIN & INHIBIT BCM pins | Body: `{ coinPin?: number, inhibitPin?: number }` |
-| `GET` | `/api/hardware/debug` | Telemetry & live pulse log stream | `{ coinSlotEnabled, pendingCoins, coinBcm, inhibitBcm, log: [] }` |
+| `POST` | `/api/gpio/config` | Hot-reload board-neutral GPIO identifiers | Body: `{ gpioPinType: 'line' \| 'bcm', coinLine?/coinPin?, inhibitLine?/inhibitPin?, gpioChip? }` |
+| `GET` | `/api/hardware/debug` | Telemetry & live pulse log stream | `{ coinSlotEnabled, backend, gpioChip, coinLine?/coinBcm?, inhibitLine?/inhibitBcm?, events: [] }` |
 | `POST` | `/api/hardware/debug/clear` | Clear live pulse debug log | `{ success: true }` |
 
 ### Client Authorization & Firewall

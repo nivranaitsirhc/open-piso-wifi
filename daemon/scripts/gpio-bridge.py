@@ -1,233 +1,350 @@
 #!/usr/bin/env python3
-"""
-OpenPisoWifi - Python GPIO Hardware Bridge for Raspberry Pi and Orange Pi.
-Interfaces with CL-168 / Allan coin acceptors using gpiozero/lgpio or gpiod.
-Communicates with pisowifi-daemon via stdin/stdout.
+"""Board-neutral GPIO bridge for OpenPisoWifi.
+
+libgpiod is the automatic backend for non-Raspberry-Pi SBCs. gpiozero/lgpio
+remains available for Raspberry Pi and explicitly selected legacy setups.
 """
 
-import sys
-import os
-import signal
 import json
-import time
+import os
+import select
+import signal
+import sys
+from datetime import timedelta
 
-def log(msg):
-    sys.stderr.write(f"[GPIO-BRIDGE] {msg}\n")
+
+def log(message):
+    sys.stderr.write(f"[GPIO-BRIDGE] {message}\n")
     sys.stderr.flush()
 
-GPIO_BACKEND = os.environ.get("GPIO_BACKEND", "auto").lower()
+
+def emit(payload):
+    sys.stdout.write(json.dumps(payload) + "\n")
+    sys.stdout.flush()
+
+
+def board_model():
+    try:
+        with open("/proc/device-tree/model", "rb") as model_file:
+            return model_file.read().replace(b"\x00", b"").decode(errors="replace").strip()
+    except OSError:
+        return "Unknown Linux SBC"
+
+
+MODEL = board_model()
+IS_RASPBERRY_PI = "raspberry pi" in MODEL.lower()
+REQUESTED_BACKEND = os.environ.get("GPIO_BACKEND", "auto").lower().strip()
 GPIO_CHIP = os.environ.get("GPIO_CHIP", "/dev/gpiochip0")
 
-try:
-    if GPIO_BACKEND in ("auto", "lgpio"):
-        from gpiozero import Button, DigitalOutputDevice, Device
-        from gpiozero.pins.lgpio import LGPIOFactory
-        Device.pin_factory = LGPIOFactory()
-        GPIO_BACKEND = "lgpio"
-except Exception as e:
-    if GPIO_BACKEND == "lgpio":
-        log(f"CRITICAL: lgpio backend unavailable: {e}")
-        sys.stdout.write(json.dumps({"status": "error", "error": f"lgpio: {e}"}) + "\n")
-        sys.stdout.flush()
-        sys.exit(1)
-    GPIO_BACKEND = "gpiod"
-
-if GPIO_BACKEND == "gpiod":
-    try:
-        import gpiod
-    except ImportError as e:
-        log(f"CRITICAL: gpiod backend unavailable: {e}")
-        sys.stdout.write(json.dumps({"status": "error", "error": f"gpiod: {e}"}) + "\n")
-        sys.stdout.flush()
-        sys.exit(1)
-
-# Raspberry Pi 40-pin header: Physical Pin -> BCM GPIO number
+# Only the Raspberry-compatible backend uses this mapping. Orange Pi and
+# other SBCs use GPIO character-device line offsets, never physical pin/BCM
+# translation.
 PHYSICAL_TO_BCM = {
-    3: 2,   5: 3,   7: 4,   8: 14,  10: 15, 11: 17, 12: 18, 13: 27,
-    15: 22, 16: 23, 18: 24, 19: 10, 21: 9,  22: 25, 23: 11, 24: 8,
-    26: 7,  29: 5,  31: 6,  32: 12, 33: 13, 35: 19, 36: 16, 37: 26,
-    38: 20, 40: 21
+    3: 2, 5: 3, 7: 4, 8: 14, 10: 15, 11: 17, 12: 18, 13: 27,
+    15: 22, 16: 23, 18: 24, 19: 10, 21: 9, 22: 25, 23: 11, 24: 8,
+    26: 7, 29: 5, 31: 6, 32: 12, 33: 13, 35: 19, 36: 16, 37: 26,
+    38: 20, 40: 21,
 }
-BCM_TO_PHYSICAL = {v: k for k, v in PHYSICAL_TO_BCM.items()}
+BCM_TO_PHYSICAL = {value: key for key, value in PHYSICAL_TO_BCM.items()}
 
-def resolve_pins(val):
-    if val in PHYSICAL_TO_BCM:
-        return PHYSICAL_TO_BCM[val], val
-    return val, BCM_TO_PHYSICAL.get(val, val)
 
-raw_coin = int(sys.argv[1]) if len(sys.argv) > 1 else 7
-raw_inhibit = int(sys.argv[2]) if len(sys.argv) > 2 else 11
+def resolve_raspberry_pin(value):
+    if value in PHYSICAL_TO_BCM:
+        return PHYSICAL_TO_BCM[value], value
+    return value, BCM_TO_PHYSICAL.get(value, value)
 
-if GPIO_BACKEND == "gpiod":
-    coin_pin = int(os.environ.get("GPIO_COIN_LINE", raw_coin))
-    inhibit_pin = int(os.environ.get("GPIO_INHIBIT_LINE", raw_inhibit))
-    coin_phys = os.environ.get("GPIO_COIN_LABEL", str(coin_pin))
-    inhibit_phys = os.environ.get("GPIO_INHIBIT_LABEL", str(inhibit_pin))
-else:
-    coin_pin, coin_phys = resolve_pins(raw_coin)
-    inhibit_pin, inhibit_phys = resolve_pins(raw_inhibit)
 
-# Inhibit active high (default True = Default HIGH / Built-in Inhibit, False = Default LOW / Relay mode)
-inhibit_active_high = sys.argv[3].lower() == "true" if len(sys.argv) > 3 else True
+def backend_candidates():
+    if REQUESTED_BACKEND in ("gpiod", "lgpio", "gpiozero"):
+        return [REQUESTED_BACKEND]
+    if REQUESTED_BACKEND not in ("", "auto"):
+        raise RuntimeError(f"Unsupported GPIO_BACKEND={REQUESTED_BACKEND!r}")
+    # Never silently apply Raspberry Pi BCM semantics to an unknown SBC.
+    return ["lgpio", "gpiod"] if IS_RASPBERRY_PI else ["gpiod"]
 
-log(f"Starting {GPIO_BACKEND} bridge — Coin: {coin_phys} ({coin_pin}), Inhibit: {inhibit_phys} ({inhibit_pin}), activeHigh: {inhibit_active_high}")
 
-class GpiodInput:
+def require_gpiod_lines():
+    coin_line = os.environ.get("GPIO_COIN_LINE")
+    inhibit_line = os.environ.get("GPIO_INHIBIT_LINE")
+    if coin_line is None or inhibit_line is None:
+        raise RuntimeError(
+            "GPIO_COIN_LINE and GPIO_INHIBIT_LINE are required for gpiod; "
+            "discover offsets with gpioinfo and configure the target board"
+        )
+    return int(coin_line), int(inhibit_line)
+
+
+class GpiodV1Input:
     def __init__(self, chip_path, offset):
+        import gpiod
+        self.gpiod = gpiod
         self.chip = gpiod.Chip(chip_path)
         self.line = self.chip.get_line(offset)
-        self.line.request(consumer="openpiso-coin", type=gpiod.LINE_REQ_EV_BOTH_EDGES,
-                          flags=gpiod.LINE_REQ_FLAG_BIAS_PULL_UP)
+        self.line.request(
+            consumer="openpiso-coin",
+            type=gpiod.LINE_REQ_EV_BOTH_EDGES,
+            flags=gpiod.LINE_REQ_FLAG_BIAS_PULL_UP,
+        )
         self.when_pressed = None
         self.when_released = None
-        self._last_level = self.line.get_value()
 
     @property
     def is_pressed(self):
         return self.line.get_value() == 0
 
     def poll(self):
-        if not self.line.event_wait(sec=1):
+        if not self.line.event_wait(sec=0):
             return
         event = self.line.event_read()
-        if event.event_type == gpiod.LineEvent.FALLING_EDGE:
-            if self.when_pressed: self.when_pressed()
-        elif event.event_type == gpiod.LineEvent.RISING_EDGE:
-            if self.when_released: self.when_released()
+        if event.event_type == self.gpiod.LineEvent.FALLING_EDGE:
+            if self.when_pressed:
+                self.when_pressed()
+        elif event.event_type == self.gpiod.LineEvent.RISING_EDGE:
+            if self.when_released:
+                self.when_released()
 
     def close(self):
         self.line.release()
         self.chip.close()
 
-class GpiodOutput:
+
+class GpiodV1Output:
     def __init__(self, chip_path, offset, initial):
+        import gpiod
         self.chip = gpiod.Chip(chip_path)
         self.line = self.chip.get_line(offset)
         self.line.request(consumer="openpiso-inhibit", type=gpiod.LINE_REQ_DIR_OUT, default_vals=[initial])
-        self._value = initial
+        self._value = int(initial)
 
     @property
-    def value(self): return self._value
+    def value(self):
+        return self._value
 
     @value.setter
-    def value(self, val):
-        self._value = int(val)
+    def value(self, value):
+        self._value = int(value)
         self.line.set_value(self._value)
 
     def close(self):
         self.line.release()
         self.chip.close()
 
-try:
-    # Inhibit output pin initialized to blocked state:
-    # If activeHigh: blocked is HIGH (1 / 3.3V)
-    # If activeLow (relay mode): blocked is LOW (0 / 0V)
-    initial_level = 1 if inhibit_active_high else 0
-    if GPIO_BACKEND == "gpiod":
-        inhibit = GpiodOutput(GPIO_CHIP, inhibit_pin, initial_level)
-        coin = GpiodInput(GPIO_CHIP, coin_pin)
-    else:
-        inhibit = DigitalOutputDevice(inhibit_pin, active_high=True, initial_value=(initial_level == 1))
-        inhibit.value = initial_level
-        coin = Button(coin_pin, pull_up=True, bounce_time=0.015)
-    
-    def on_pulse_press():
-        log(f"⚡ [EDGE FALLING] Coin pulse START on Physical Pin {coin_phys} (Pin went LOW/0V)!")
-        sys.stdout.write("PULSE\n")
-        sys.stdout.flush()
 
-    def on_pulse_release():
-        log(f"⚡ [EDGE RISING] Coin pulse END on Physical Pin {coin_phys} (Pin returned to HIGH/3.3V).")
-        
+class GpiodV2Input:
+    def __init__(self, chip_path, offset):
+        import gpiod
+        self.gpiod = gpiod
+        self.offset = offset
+        self.chip = gpiod.Chip(chip_path)
+        line = gpiod.line
+        self.request = self.chip.request_lines(
+            consumer="openpiso-coin",
+            config={offset: line.LineSettings(
+                direction=line.Direction.INPUT,
+                edge_detection=line.Edge.BOTH,
+                bias=line.Bias.PULL_UP,
+            )},
+        )
+        self.when_pressed = None
+        self.when_released = None
+
+    @property
+    def is_pressed(self):
+        return self.request.get_value(self.offset) == self.gpiod.line.Value.INACTIVE
+
+    def poll(self):
+        if not self.request.wait_edge_events(timedelta(seconds=0)):
+            return
+        for event in self.request.read_edge_events():
+            event_type = getattr(event.event_type, "name", str(event.event_type)).upper()
+            if "FALLING" in event_type:
+                if self.when_pressed:
+                    self.when_pressed()
+            elif "RISING" in event_type:
+                if self.when_released:
+                    self.when_released()
+
+    def close(self):
+        self.request.release()
+        self.chip.close()
+
+
+class GpiodV2Output:
+    def __init__(self, chip_path, offset, initial):
+        import gpiod
+        self.gpiod = gpiod
+        self.offset = offset
+        self.chip = gpiod.Chip(chip_path)
+        line = gpiod.line
+        self.request = self.chip.request_lines(
+            consumer="openpiso-inhibit",
+            config={offset: line.LineSettings(
+                direction=line.Direction.OUTPUT,
+                output_value=line.Value.ACTIVE if initial else line.Value.INACTIVE,
+            )},
+        )
+        self._value = int(initial)
+
+    @property
+    def value(self):
+        return self._value
+
+    @value.setter
+    def value(self, value):
+        self._value = int(value)
+        self.request.set_value(
+            self.offset,
+            self.gpiod.line.Value.ACTIVE if self._value else self.gpiod.line.Value.INACTIVE,
+        )
+
+    def close(self):
+        self.request.release()
+        self.chip.close()
+
+
+def make_gpiod_devices(initial_level):
+    import gpiod
+    coin_line, inhibit_line = require_gpiod_lines()
+    # libgpiod v1 exposes Chip.get_line; v2 uses request_lines/LineSettings.
+    if hasattr(gpiod.Chip, "get_line"):
+        coin = GpiodV1Input(GPIO_CHIP, coin_line)
+        inhibit = GpiodV1Output(GPIO_CHIP, inhibit_line, initial_level)
+    else:
+        coin = GpiodV2Input(GPIO_CHIP, coin_line)
+        inhibit = GpiodV2Output(GPIO_CHIP, inhibit_line, initial_level)
+    return coin, inhibit, coin_line, inhibit_line
+
+
+RAW_COIN = int(sys.argv[1]) if len(sys.argv) > 1 else 7
+RAW_INHIBIT = int(sys.argv[2]) if len(sys.argv) > 2 else 11
+INHIBIT_ACTIVE_HIGH = sys.argv[3].lower() == "true" if len(sys.argv) > 3 else True
+INITIAL_LEVEL = 1 if INHIBIT_ACTIVE_HIGH else 0
+coin = None
+inhibit = None
+backend = None
+coin_identifier = None
+inhibit_identifier = None
+
+
+def close_devices():
+    for device in (inhibit, coin):
+        try:
+            if device:
+                device.close()
+        except Exception:
+            pass
+
+
+def initialize_devices():
+    global coin, inhibit, backend, coin_identifier, inhibit_identifier
+    errors = []
+    for candidate in backend_candidates():
+        try:
+            if candidate == "gpiod":
+                coin_device, inhibit_device, coin_id, inhibit_id = make_gpiod_devices(INITIAL_LEVEL)
+                coin_label = os.environ.get("GPIO_COIN_LABEL", f"line {coin_id}")
+                inhibit_label = os.environ.get("GPIO_INHIBIT_LABEL", f"line {inhibit_id}")
+            else:
+                from gpiozero import Button, DigitalOutputDevice, Device
+                from gpiozero.pins.lgpio import LGPIOFactory
+                Device.pin_factory = LGPIOFactory()
+                coin_id, coin_label = resolve_raspberry_pin(RAW_COIN)
+                inhibit_id, inhibit_label = resolve_raspberry_pin(RAW_INHIBIT)
+                inhibit_device = DigitalOutputDevice(
+                    inhibit_id, active_high=True, initial_value=(INITIAL_LEVEL == 1)
+                )
+                inhibit_device.value = INITIAL_LEVEL
+                coin_device = Button(coin_id, pull_up=True, bounce_time=0.015)
+            coin = coin_device
+            inhibit = inhibit_device
+            backend = candidate
+            coin_identifier = (coin_id, coin_label)
+            inhibit_identifier = (inhibit_id, inhibit_label)
+            return
+        except Exception as error:
+            close_devices()
+            coin = None
+            inhibit = None
+            errors.append(f"{candidate}: {error}")
+    raise RuntimeError("; ".join(errors) or "no GPIO backend available")
+
+
+def on_pulse_press():
+    log(f"[EDGE FALLING] Coin pulse START on {coin_identifier[1]}!")
+    sys.stdout.write("PULSE\n")
+    sys.stdout.flush()
+
+
+def on_pulse_release():
+    log(f"[EDGE RISING] Coin pulse END on {coin_identifier[1]}.")
+
+
+try:
+    initialize_devices()
     coin.when_pressed = on_pulse_press
     coin.when_released = on_pulse_release
-    
-    # Announce ready
-    sys.stdout.write(json.dumps({
-        "status": "ready",
-        "coinPin": coin_phys,
-        "inhibitPin": inhibit_phys,
-        "coinBcm": coin_pin,
-        "inhibitBcm": inhibit_pin,
-        "backend": GPIO_BACKEND,
-        "activeHigh": inhibit_active_high,
-        "inhibitLevel": initial_level
-    }) + "\n")
-    sys.stdout.flush()
-    idle_state = "LOW (0V / PRESSED)" if coin.is_pressed else "HIGH (3.3V IDLE)"
-    log(f"GPIO hardware initialized: Coin Physical Pin {coin_phys} idle state is {idle_state}.")
-    if coin.is_pressed:
-        log(f"⚠️ WARNING: Coin Physical Pin {coin_phys} is starting in LOW state! If using CL-168, ensure switch is set to NO (Normally Open), not NC.")
-    log(f"Inhibit Physical Pin {inhibit_phys} initialized with initialLevel={initial_level} (activeHigh={inhibit_active_high}).")
-
-except Exception as e:
-    log(f"Failed to initialize pins: {e}")
-    sys.stdout.write(json.dumps({"status": "error", "error": str(e)}) + "\n")
-    sys.stdout.flush()
+except Exception as error:
+    log(f"Failed to initialize GPIO: {error}")
+    emit({"status": "error", "error": str(error), "boardModel": MODEL})
     sys.exit(1)
 
-def cleanup(*args):
+ready = {
+    "status": "ready", "backend": backend, "boardModel": MODEL,
+    "gpioChip": GPIO_CHIP if backend == "gpiod" else None,
+    "coinPin": coin_identifier[1], "inhibitPin": inhibit_identifier[1],
+    "activeHigh": INHIBIT_ACTIVE_HIGH, "inhibitLevel": INITIAL_LEVEL,
+}
+if backend == "gpiod":
+    ready.update({"coinLine": coin_identifier[0], "inhibitLine": inhibit_identifier[0]})
+else:
+    ready.update({"coinBcm": coin_identifier[0], "inhibitBcm": inhibit_identifier[0]})
+emit(ready)
+
+try:
+    idle_state = "LOW (0V / PRESSED)" if coin.is_pressed else "HIGH (3.3V IDLE)"
+    log(f"GPIO initialized: {coin_identifier[1]} idle state is {idle_state}.")
+except Exception as error:
+    log(f"GPIO status read failed: {error}")
+
+
+def cleanup(*_args):
     log("Cleaning up GPIO pins...")
-    try:
-        inhibit.close()
-        coin.close()
-    except Exception:
-        pass
+    close_devices()
     sys.exit(0)
+
 
 signal.signal(signal.SIGTERM, cleanup)
 signal.signal(signal.SIGINT, cleanup)
 
-# Read commands from stdin using unbuffered readline. gpiod also needs polling
-# for edge events, so use a short timeout and check stdin between polls.
 while True:
-    if GPIO_BACKEND == "gpiod":
-        import select
-        readable, _, _ = select.select([sys.stdin], [], [], 0.05)
+    if backend == "gpiod":
         coin.poll()
+        readable, _, _ = select.select([sys.stdin], [], [], 0.05)
         if not readable:
             continue
     line = sys.stdin.readline()
     if not line:
         break
-    line = line.strip().lower()
-    if not line:
+    parts = line.strip().lower().split()
+    if not parts:
         continue
-
-    parts = line.split()
-    cmd = parts[0]
-
-    if cmd == "enable":
-        # Target level: 0 for built-in inhibit (pull LOW to accept), 1 for relay mode (pull HIGH to connect)
-        target_val = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else (0 if inhibit_active_high else 1)
-        inhibit.value = target_val
-        v_label = f"LOW/0V (Physical Pin {inhibit_phys} pulled LOW -> Slot ACCEPTING coins)" if target_val == 0 else f"HIGH/3.3V (Physical Pin {inhibit_phys} pulled HIGH -> Relay ON / Slot ACCEPTING coins)"
-        log(f"[INHIBIT] {v_label}")
-        sys.stdout.write(json.dumps({"event": "inhibit", "state": "enabled", "level": int(inhibit.value)}) + "\n")
-        sys.stdout.flush()
-    elif cmd in ("disable", "block"):
-        # Target level: 1 for built-in inhibit (pull HIGH to block), 0 for relay mode (pull LOW to cut)
-        target_val = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else (1 if inhibit_active_high else 0)
-        inhibit.value = target_val
-        v_label = f"HIGH/3.3V (Physical Pin {inhibit_phys} set HIGH -> Slot BLOCKED)" if target_val == 1 else f"LOW/0V (Physical Pin {inhibit_phys} set LOW -> Relay OFF / Signal CUT)"
-        log(f"[INHIBIT] {v_label}")
-        sys.stdout.write(json.dumps({"event": "inhibit", "state": "blocked", "level": int(inhibit.value)}) + "\n")
-        sys.stdout.flush()
-    elif cmd == "set_mode":
-        if len(parts) > 1:
-            inhibit_active_high = parts[1] == "true" or parts[1] == "1"
-            log(f"Inhibit mode updated: activeHigh={inhibit_active_high}")
-            sys.stdout.write(json.dumps({"event": "mode_updated", "activeHigh": inhibit_active_high}) + "\n")
-            sys.stdout.flush()
-    elif cmd == "status":
-        sys.stdout.write(json.dumps({
-            "status": "online",
-            "coinLevel": int(coin.is_pressed),
-            "inhibitLevel": int(inhibit.value),
-            "activeHigh": inhibit_active_high
-        }) + "\n")
-        sys.stdout.flush()
-    elif cmd == "quit":
+    command = parts[0]
+    if command == "enable":
+        target = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else (0 if INHIBIT_ACTIVE_HIGH else 1)
+        inhibit.value = target
+        emit({"event": "inhibit", "state": "enabled", "level": int(inhibit.value)})
+    elif command in ("disable", "block"):
+        target = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else (1 if INHIBIT_ACTIVE_HIGH else 0)
+        inhibit.value = target
+        emit({"event": "inhibit", "state": "blocked", "level": int(inhibit.value)})
+    elif command == "set_mode" and len(parts) > 1:
+        INHIBIT_ACTIVE_HIGH = parts[1] in ("true", "1")
+        emit({"event": "mode_updated", "activeHigh": INHIBIT_ACTIVE_HIGH})
+    elif command == "status":
+        emit({"status": "online", "backend": backend, "boardModel": MODEL,
+              "coinLevel": int(coin.is_pressed), "inhibitLevel": int(inhibit.value),
+              "activeHigh": INHIBIT_ACTIVE_HIGH})
+    elif command == "quit":
         break
 
 cleanup()

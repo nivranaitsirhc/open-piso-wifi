@@ -48,10 +48,16 @@ export async function GET() {
       router_ssh_key_path:
         settingsMap.router_ssh_key_path || "/root/.ssh/id_rsa",
       router_mode: settingsMap.router_mode || "fw4_nftables",
-      // GPIO Hardware Pin Settings (Physical 40-pin header numbering)
-      // Default: Coin = Physical Pin 7, Inhibit = Physical Pin 11
-      coin_gpio_pin: settingsMap.coin_gpio_pin || "7",
-      inhibit_gpio_pin: settingsMap.inhibit_gpio_pin || "11",
+      // Board-neutral GPIO settings. gpiod values are line offsets, not BCM
+      // numbers or physical header pins.
+      gpio_backend: settingsMap.gpio_backend || process.env.GPIO_BACKEND ||
+        (settingsMap.coin_gpio_pin || settingsMap.inhibit_gpio_pin ? "lgpio" : "auto"),
+      gpio_chip: settingsMap.gpio_chip || process.env.GPIO_CHIP || "/dev/gpiochip0",
+      gpio_coin_line: settingsMap.gpio_coin_line || process.env.GPIO_COIN_LINE || "",
+      gpio_inhibit_line: settingsMap.gpio_inhibit_line || process.env.GPIO_INHIBIT_LINE || "",
+      // Legacy Raspberry Pi aliases are returned for older portal clients.
+      coin_gpio_pin: settingsMap.coin_gpio_pin || "",
+      inhibit_gpio_pin: settingsMap.inhibit_gpio_pin || "",
       inhibit_mode: settingsMap.inhibit_mode || "high",
       coin_slot_timeout_seconds: settingsMap.coin_slot_timeout_seconds || "60",
       // Loyalty & Daily Streak System
@@ -108,6 +114,10 @@ export async function POST(request: NextRequest) {
       "router_ssh_key_path",
       "router_mode",
       // GPIO Hardware Pin Settings
+      "gpio_backend",
+      "gpio_chip",
+      "gpio_coin_line",
+      "gpio_inhibit_line",
       "coin_gpio_pin",
       "inhibit_gpio_pin",
       "inhibit_mode",
@@ -203,24 +213,62 @@ export async function POST(request: NextRequest) {
       });
     } catch {}
 
-    // Hot-notify daemon of GPIO pin changes (Physical Pin numbers)
+    // Hot-notify daemon of GPIO pin changes. New settings are generic line
+    // offsets; legacy coin_gpio_pin/inhibit_gpio_pin remain BCM-compatible.
     if (
+      (body.gpio_coin_line !== undefined ||
+      body.gpio_inhibit_line !== undefined ||
+      body.gpio_backend !== undefined ||
+      body.gpio_chip !== undefined ||
       body.coin_gpio_pin !== undefined ||
       body.inhibit_gpio_pin !== undefined ||
-      body.inhibit_mode !== undefined
+      body.inhibit_mode !== undefined) &&
+      (String(body.gpio_coin_line ?? '').trim() ||
+       String(body.gpio_inhibit_line ?? '').trim() ||
+       String(body.coin_gpio_pin ?? '').trim() ||
+       String(body.inhibit_gpio_pin ?? '').trim() ||
+       body.gpio_backend === 'gpiod')
     ) {
       try {
-        const coinPin = parseInt(body.coin_gpio_pin || "7", 10);
-        const inhibitPin = parseInt(body.inhibit_gpio_pin || "11", 10);
+        const hasLineConfig = Boolean(
+          (body.gpio_coin_line !== undefined && String(body.gpio_coin_line).trim() !== "") ||
+          (body.gpio_inhibit_line !== undefined && String(body.gpio_inhibit_line).trim() !== "") ||
+          body.gpio_backend === "gpiod"
+        );
+        const savedCoinLine = (await prisma.setting.findUnique({ where: { key: "gpio_coin_line" } }))?.value || "";
+        const savedInhibitLine = (await prisma.setting.findUnique({ where: { key: "gpio_inhibit_line" } }))?.value || "";
+        const savedBackend = (await prisma.setting.findUnique({ where: { key: "gpio_backend" } }))?.value || "auto";
+        const savedChip = (await prisma.setting.findUnique({ where: { key: "gpio_chip" } }))?.value || "/dev/gpiochip0";
         const inhibitMode =
           body.inhibit_mode ||
           (await prisma.setting.findUnique({ where: { key: "inhibit_mode" } }))
             ?.value ||
           "high";
-        const inhibitActiveHigh = inhibitMode === "low";
-        await setDaemonGpioConfig(coinPin, inhibitPin, inhibitActiveHigh);
+        const inhibitActiveHigh = inhibitMode !== "low";
+        if (hasLineConfig || savedBackend === "gpiod") {
+          const coinLine = parseInt(body.gpio_coin_line ?? savedCoinLine, 10);
+          const inhibitLine = parseInt(body.gpio_inhibit_line ?? savedInhibitLine, 10);
+          if (!Number.isInteger(coinLine) || !Number.isInteger(inhibitLine) || coinLine < 0 || inhibitLine < 0) {
+            throw new Error("GPIO line offsets are required for the gpiod backend.");
+          }
+          await setDaemonGpioConfig({
+            pinType: "line",
+            coin: coinLine,
+            inhibit: inhibitLine,
+            backend: body.gpio_backend ?? savedBackend,
+            chip: body.gpio_chip ?? savedChip,
+            inhibitActiveHigh,
+          });
+        } else {
+          const coinPin = parseInt(body.coin_gpio_pin ?? "", 10);
+          const inhibitPin = parseInt(body.inhibit_gpio_pin ?? "", 10);
+          if (!Number.isInteger(coinPin) || !Number.isInteger(inhibitPin)) {
+            throw new Error("GPIO line offsets are not configured yet. Enter the board's gpiod offsets or select a legacy BCM backend.");
+          }
+          await setDaemonGpioConfig({ pinType: "bcm", coin: coinPin, inhibit: inhibitPin, inhibitActiveHigh });
+        }
         console.log(
-          `[SETTINGS] GPIO hot-reload: Coin Physical Pin ${coinPin}, Inhibit Physical Pin ${inhibitPin}, Mode ${inhibitMode} (activeHigh=${inhibitActiveHigh})`,
+          `[SETTINGS] GPIO hot-reload: board-neutral configuration applied (mode=${inhibitMode}, activeHigh=${inhibitActiveHigh})`,
         );
       } catch (gpioErr) {
         console.warn("[SETTINGS] GPIO hot-reload notice:", gpioErr);

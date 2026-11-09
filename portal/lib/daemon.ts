@@ -189,29 +189,37 @@ export async function disableDaemonCoinSlot(slotId?: string): Promise<{ success:
   return { success: true, coinSlotEnabled: false };
 }
 
-/**
- * Hot-reloads GPIO pin assignments on the daemon without a restart.
- * Uses BCM (Broadcom) GPIO numbers as required by the onoff package.
- */
-export async function setDaemonGpioConfig(
-  coinBcm: number,
-  inhibitBcm: number,
-  inhibitActiveHigh: boolean = true
-): Promise<{ success: boolean; coinBcm: number; inhibitBcm: number; inhibitActiveHigh?: boolean }> {
+/** Hot-reloads board-neutral GPIO assignments on the daemon. */
+export async function setDaemonGpioConfig(config: {
+  pinType: 'line' | 'bcm';
+  coin: number;
+  inhibit: number;
+  backend?: string;
+  chip?: string;
+  inhibitActiveHigh?: boolean;
+}): Promise<Record<string, unknown> & { success: boolean }> {
   try {
     const res = await fetch(`${DAEMON_URL}/api/gpio/config`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ coinPin: coinBcm, inhibitPin: inhibitBcm, inhibitActiveHigh }),
+      body: JSON.stringify({
+        gpioPinType: config.pinType,
+        coinLine: config.pinType === 'line' ? config.coin : undefined,
+        inhibitLine: config.pinType === 'line' ? config.inhibit : undefined,
+        coinPin: config.pinType === 'bcm' ? config.coin : undefined,
+        inhibitPin: config.pinType === 'bcm' ? config.inhibit : undefined,
+        gpioBackend: config.backend,
+        gpioChip: config.chip,
+        inhibitActiveHigh: config.inhibitActiveHigh,
+      }),
       cache: 'no-store',
       signal: AbortSignal.timeout(3000),
     });
     if (res.ok) {
-      const data = await res.json();
-      return { success: true, coinBcm: data.coinBcm, inhibitBcm: data.inhibitBcm, inhibitActiveHigh: data.inhibitActiveHigh };
+      return { success: true, ...(await res.json()) };
     }
   } catch {}
-  return { success: false, coinBcm, inhibitBcm, inhibitActiveHigh };
+  return { success: false };
 }
 
 /**
@@ -231,8 +239,11 @@ export async function getDaemonHardwareDebug(): Promise<any> {
     currentState: {
       coinSlotEnabled: false,
       pendingCoins: 0,
-      coinBcm: 4,
-      inhibitBcm: 17,
+      backend: 'unknown',
+      boardModel: 'Unknown Linux SBC',
+      pinType: 'line',
+      coinLine: undefined,
+      inhibitLine: undefined,
       inhibitActiveHigh: true,
       gpioAvailable: false,
       lastGpioError: null,
