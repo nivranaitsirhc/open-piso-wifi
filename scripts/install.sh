@@ -703,11 +703,14 @@ if [ "$ALREADY_EXTRACTED" = false ]; then
 
         download_asset() {
             local url="$1"
+            printf 'curl binary: %s\n' "$(command -v curl)" >&2
+            printf 'download URL: <%q>\n' "$url" >&2
+            printf 'tarball path: <%q>\n' "$TEMP_TARBALL" >&2
             if [ -n "$GITHUB_TOKEN" ]; then
-                curl -fL --retry 3 --retry-delay 2 --connect-timeout 15 \
+                command curl -fL --retry 3 --retry-delay 2 --connect-timeout 15 \
                      -H "Authorization: Bearer $GITHUB_TOKEN" --progress-bar "$url" -o "$TEMP_TARBALL"
             else
-                curl -fL --retry 3 --retry-delay 2 --connect-timeout 15 \
+                command curl -fL --retry 3 --retry-delay 2 --connect-timeout 15 \
                      --progress-bar "$url" -o "$TEMP_TARBALL"
             fi
         }
