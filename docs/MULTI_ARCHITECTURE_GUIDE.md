@@ -43,12 +43,10 @@ ISP Modem/ONT ──[Ethernet]──▶ [Pi eth0: WAN, DHCP Client]
 ### Installation Steps on Armbian/Debian/Ubuntu:
 ```bash
 # 1. Run the automated gateway setup script
-sudo ./scripts/setup-pi-gateway.sh --wan-iface eth0 --lan-iface eth1
+sudo ./scripts/setup-sbc-gateway.sh --wan-iface eth0 --lan-iface eth1
 
-# 2. Configure the daemon environment
-echo "ROUTER_MODE=local_linux" >> daemon/.env
-echo "LAN_IFACE=eth1" >> daemon/.env
-echo "WAN_IFACE=eth0" >> daemon/.env
+# 2. The gateway setup persists the daemon environment, network backend,
+#    LAN address, WAN DHCP, dnsmasq, and nftables configuration automatically.
 
 # 3. Restart services
 sudo systemctl restart pisowifi-daemon
@@ -56,9 +54,9 @@ sudo systemctl restart pisowifi-portal
 ```
 
 ### Gateway Script Capabilities:
-* `sudo ./scripts/setup-pi-gateway.sh --status`: Inspect WAN/LAN IP routing, active authorized client count, and services.
-* `sudo ./scripts/setup-pi-gateway.sh --dry-run`: Preview all configuration changes without modifying the system.
-* `sudo ./scripts/setup-pi-gateway.sh --rollback`: Cleanly tear down nftables tables, remove dnsmasq configs, and restore default networking.
+* `sudo ./scripts/setup-sbc-gateway.sh --status`: Inspect WAN/LAN IP routing, active authorized client count, and services.
+* `sudo ./scripts/setup-sbc-gateway.sh --dry-run`: Preview all configuration changes without modifying the system.
+* `sudo ./scripts/setup-sbc-gateway.sh --rollback`: Cleanly tear down nftables tables, remove dnsmasq configs, and restore default networking.
 
 ---
 

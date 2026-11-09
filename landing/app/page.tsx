@@ -728,7 +728,7 @@ bash scripts/deploy-router.sh \
                     ⚡ Setup Standalone Gateway:
                   </div>
                   <pre className="text-neutral-300 overflow-x-auto p-2 bg-neutral-900 rounded-lg text-[11px] sm:text-xs"><code># Run the gateway setup utility:
-sudo bash scripts/setup-pi-gateway.sh \
+sudo bash scripts/setup-sbc-gateway.sh \
 --wan eth0 \
 --lan eth1 \
 --subnet 10.0.0.1/22</code></pre>
@@ -1239,7 +1239,7 @@ const char* SHARED_SECRET = &quot;change-me-to-a-secure-secret&quot;;</code></pr
                   </p>
                 </div>
                 <div className="p-2.5 bg-neutral-900 rounded-xl font-mono text-[11px] text-amber-300 overflow-x-auto">
-                  <code>sudo bash scripts/setup-pi-gateway.sh --wan eth0 --lan eth1 --subnet 10.0.0.1/22</code>
+                  <code>sudo bash scripts/setup-sbc-gateway.sh --wan-iface eth0 --lan-iface eth1</code>
                 </div>
               </div>
 

@@ -89,9 +89,15 @@ if [ -z "$GITHUB_REPO" ] && [ -f "$PORTAL_DIR/.env" ]; then
 fi
 GITHUB_REPO="${GITHUB_REPO:-nivranaitsirhc/open-piso-wifi}"
 
-ROUTER_MODE="${ROUTER_MODE:-}"
+ROUTER_MODE_OVERRIDE="${ROUTER_MODE:-}"
+ROUTER_MODE="$ROUTER_MODE_OVERRIDE"
 if [ -z "$ROUTER_MODE" ] && [ -f "$DAEMON_DIR/.env" ]; then
-    ROUTER_MODE=$(grep -E '^ROUTER_MODE=' "$DAEMON_DIR/.env" | head -n1 | cut -d'=' -f2- | tr -d '\"'\'' ' || echo "")
+    ROUTER_MODE=$(grep -E '^ROUTER_MODE=' "$DAEMON_DIR/.env" | head -n1 | cut -d'=' -f2- | tr -d '\r' | tr -d '\"'\'' ' || echo "")
+fi
+
+GATEWAY_STATE_FILE="/etc/openpiso-gateway.env"
+if [ -z "$ROUTER_MODE_OVERRIDE" ] && [ -f "$GATEWAY_STATE_FILE" ]; then
+    ROUTER_MODE="local_linux"
 fi
 
 GITHUB_TOKEN="${CLI_TOKEN:-${GITHUB_TOKEN:-}}"
@@ -117,12 +123,12 @@ ensure_local_linux_nftables() {
     fi
 
     if [ ! -f "$nft_gateway" ]; then
-        echo -e "${YELLOW}⚠️ Local gateway rules were not found at ${nft_gateway}; run setup-pi-gateway.sh.${NC}"
+        echo -e "${YELLOW}⚠️ Local gateway rules were not found at ${nft_gateway}; run setup-sbc-gateway.sh.${NC}"
         return 0
     fi
 
     $SUDO_CMD touch "$nft_main"
-    if ! $SUDO_CMD grep -Fqx "$nft_include" "$nft_main"; then
+    if ! $SUDO_CMD grep -Fq "$nft_gateway" "$nft_main"; then
         echo -e "--> Adding persistent local gateway include to ${nft_main}..."
         nft_backup=$(mktemp)
         $SUDO_CMD cp "$nft_main" "$nft_backup"
@@ -148,8 +154,85 @@ ensure_local_linux_nftables() {
         $SUDO_CMD systemctl restart nftables
     fi
 
+    $SUDO_CMD systemctl enable nftables >/dev/null 2>&1 || true
+
     [ -n "$nft_backup" ] && rm -f "$nft_backup"
     echo -e "${GREEN}✓ Local gateway nftables configuration verified.${NC}"
+}
+
+ensure_local_linux_network() {
+    local backend=""
+    local lan_iface=""
+    local wan_iface=""
+
+    if [ -f "$GATEWAY_STATE_FILE" ]; then
+        backend=$(grep -E '^NETWORK_BACKEND=' "$GATEWAY_STATE_FILE" | cut -d'=' -f2- | tr -d '\r' | head -n1)
+        lan_iface=$(grep -E '^LAN_IFACE=' "$GATEWAY_STATE_FILE" | cut -d'=' -f2- | tr -d '\r' | head -n1)
+        wan_iface=$(grep -E '^WAN_IFACE=' "$GATEWAY_STATE_FILE" | cut -d'=' -f2- | tr -d '\r' | head -n1)
+    fi
+
+    if [ -z "$lan_iface" ] && [ -f "$DAEMON_DIR/.env" ]; then
+        lan_iface=$(grep -E '^ROUTER_LAN_INTERFACE=' "$DAEMON_DIR/.env" | cut -d'=' -f2- | tr -d '\r\"' | head -n1)
+    fi
+    if [ -z "$wan_iface" ] && [ -f "$DAEMON_DIR/.env" ]; then
+        wan_iface=$(grep -E '^ROUTER_WAN_INTERFACE=' "$DAEMON_DIR/.env" | cut -d'=' -f2- | tr -d '\r\"' | head -n1)
+    fi
+    if [ -z "$backend" ]; then
+        if [ -f /etc/systemd/system/openpiso-gateway-network.service ]; then
+            backend="systemd-fallback"
+        elif [ -f /etc/systemd/network/20-openpiso-gateway-lan.network ]; then
+            backend="systemd-networkd"
+        elif [ -f /etc/network/interfaces.d/openpiso-gateway ]; then
+            backend="ifupdown"
+        elif [ -f /etc/dhcpcd.conf ] && grep -q '# BEGIN OPENPISOWIFI GATEWAY' /etc/dhcpcd.conf; then
+            backend="dhcpcd"
+        fi
+    fi
+
+    case "$backend" in
+        networkmanager)
+            $SUDO_CMD nmcli connection up openpiso-gateway-lan >/dev/null 2>&1 || true
+            $SUDO_CMD nmcli connection up openpiso-gateway-wan >/dev/null 2>&1 || true
+            ;;
+        systemd-networkd)
+            $SUDO_CMD systemctl enable --now systemd-networkd >/dev/null 2>&1 || true
+            $SUDO_CMD networkctl reload >/dev/null 2>&1 || true
+            [ -n "$wan_iface" ] && $SUDO_CMD networkctl reconfigure "$wan_iface" >/dev/null 2>&1 || true
+            [ -n "$lan_iface" ] && $SUDO_CMD networkctl reconfigure "$lan_iface" >/dev/null 2>&1 || true
+            ;;
+        ifupdown)
+            [ -n "$wan_iface" ] && $SUDO_CMD ifup "$wan_iface" >/dev/null 2>&1 || true
+            [ -n "$lan_iface" ] && $SUDO_CMD ifup "$lan_iface" >/dev/null 2>&1 || true
+            ;;
+        dhcpcd)
+            $SUDO_CMD systemctl enable --now dhcpcd >/dev/null 2>&1 || true
+            ;;
+        systemd-fallback)
+            $SUDO_CMD systemctl daemon-reload >/dev/null 2>&1 || true
+            $SUDO_CMD systemctl enable --now openpiso-gateway-network.service >/dev/null 2>&1 || true
+            ;;
+        *)
+            echo -e "${YELLOW}⚠️ No persisted SBC network backend was recorded; run setup-sbc-gateway.sh to establish one.${NC}"
+            ;;
+    esac
+}
+
+ensure_local_linux_dnsmasq() {
+    local dnsmasq_conf="/etc/dnsmasq.d/openpiso-gateway.conf"
+
+    if [ ! -f "$dnsmasq_conf" ]; then
+        echo -e "${YELLOW}⚠️ Local gateway dnsmasq configuration was not found at ${dnsmasq_conf}.${NC}"
+        return 0
+    fi
+
+    if command -v dnsmasq >/dev/null 2>&1 && ! $SUDO_CMD dnsmasq --test >/dev/null 2>&1; then
+        echo -e "${YELLOW}⚠️ dnsmasq configuration failed validation; existing configuration was preserved.${NC}"
+        return 0
+    fi
+
+    $SUDO_CMD systemctl enable dnsmasq >/dev/null 2>&1 || true
+    $SUDO_CMD systemctl restart dnsmasq >/dev/null 2>&1 || \
+        echo -e "${YELLOW}⚠️ dnsmasq could not be restarted; inspect journalctl -b -u dnsmasq.${NC}"
 }
 
 # Check sudo access (probe systemctl first as it is explicitly granted in sudoers)
@@ -535,7 +618,9 @@ echo -e "${GREEN}✓ Database verified and restored with zero data loss.${NC}"
 echo ""
 if [ "$ROUTER_MODE" = "local" ] || [ "$ROUTER_MODE" = "local_linux" ]; then
     echo -e "${PURPLE}[5/6] Skipping OpenWrt Router update (local Linux gateway mode)...${NC}"
+    ensure_local_linux_network
     ensure_local_linux_nftables
+    ensure_local_linux_dnsmasq
     echo -e "${GREEN}✓ Local nftables/dnsmasq gateway configuration preserved.${NC}"
 else
 echo -e "${PURPLE}[5/6] Updating OpenWrt Router configuration (Preserving State)...${NC}"

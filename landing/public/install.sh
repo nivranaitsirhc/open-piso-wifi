@@ -478,35 +478,116 @@ echo -e "${GREEN}✓ Node.js $(node -v) & npm $(npm -v) verified at ${NODE_BIN}.
 # ------------------------------------------------------------------------------
 echo ""
 echo -e "${PURPLE}[2/6] Configuring Static LAN IP (${PORTAL_IP})...${NC}"
+if [ -z "$PORTAL_IFACE" ]; then
+    echo -e "${RED}❌ Could not determine the portal network interface; refusing to create a non-persistent IP configuration.${NC}"
+    exit 1
+fi
 
-if command -v nmcli >/dev/null 2>&1 && systemctl is-active --quiet NetworkManager; then
-    ETH_CONN=""
-    if [ -n "$PORTAL_IFACE" ]; then
+persist_portal_network() {
+    local networkd_dir="/etc/systemd/network"
+    local networkd_file="${networkd_dir}/80-openpisowifi-portal.network"
+    local ifupdown_file="/etc/network/interfaces.d/openpisowifi-portal"
+    local fallback_unit="/etc/systemd/system/openpisowifi-portal-network.service"
+    local ip_bin
+    ip_bin="$(command -v ip)"
+
+    if command -v nmcli >/dev/null 2>&1 && systemctl is-active --quiet NetworkManager; then
+        ETH_CONN=""
         ETH_CONN=$(nmcli -g GENERAL.CONNECTION device show "$PORTAL_IFACE" 2>/dev/null | sed '/^--$/d' | head -n1 || true)
+        if [ -n "$ETH_CONN" ]; then
+            echo -e "--> Persisting static IP through NetworkManager: ${ETH_CONN}"
+            sudo nmcli connection modify "$ETH_CONN" \
+                ipv4.addresses "${PORTAL_IP}/24" \
+                ipv4.gateway "$ROUTER_IP" \
+                ipv4.dns "1.1.1.1 8.8.8.8" \
+                ipv4.method manual
+            sudo nmcli connection up "$ETH_CONN" || true
+        else
+            echo -e "${RED}❌ NetworkManager has no active connection for ${PORTAL_IFACE}; refusing to continue without a persistent network profile.${NC}"
+            return 1
+        fi
+        return 0
     fi
-    if [ -n "$ETH_CONN" ]; then
-        echo -e "--> Setting static IP on NetworkManager connection: ${ETH_CONN}"
-        sudo nmcli connection modify "$ETH_CONN" \
-            ipv4.addresses ${PORTAL_IP}/24 \
-            ipv4.gateway ${ROUTER_IP} \
-            ipv4.dns "1.1.1.1 8.8.8.8" \
-            ipv4.method manual || true
-        sudo nmcli connection up "$ETH_CONN" || true
-    fi
-elif [ -f /etc/dhcpcd.conf ]; then
-    echo -e "--> Adding static IP configuration to /etc/dhcpcd.conf"
-    if ! grep -q "${PORTAL_IP}" /etc/dhcpcd.conf; then
-        sudo tee -a /etc/dhcpcd.conf > /dev/null << EOF
 
-# OpenPisoWifi Static IP Configuration
+    if systemctl is-active --quiet systemd-networkd || systemctl is-enabled --quiet systemd-networkd; then
+        echo -e "--> Persisting static IP through systemd-networkd"
+        sudo mkdir -p "$networkd_dir"
+        sudo tee "$networkd_file" >/dev/null <<EOF
+[Match]
+Name=${PORTAL_IFACE}
+
+[Network]
+Address=${PORTAL_IP}/24
+Gateway=${ROUTER_IP}
+DNS=1.1.1.1
+DNS=8.8.8.8
+IPv6AcceptRA=no
+EOF
+        sudo systemctl enable --now systemd-networkd
+        sudo networkctl reload 2>/dev/null || true
+        sudo networkctl reconfigure "$PORTAL_IFACE" 2>/dev/null || true
+        return 0
+    fi
+
+    if command -v ifup >/dev/null 2>&1 && [ -f /etc/network/interfaces ]; then
+        echo -e "--> Persisting static IP through ifupdown"
+        sudo mkdir -p /etc/network/interfaces.d
+        if ! sudo grep -Eq '^[[:space:]]*(source|source-directory)[[:space:]]+/etc/network/interfaces\\.d/\\*' /etc/network/interfaces; then
+            printf '\nsource /etc/network/interfaces.d/*\n' | sudo tee -a /etc/network/interfaces >/dev/null
+        fi
+        sudo tee "$ifupdown_file" >/dev/null <<EOF
+# Managed by OpenPisoWiFi install.sh.
+auto ${PORTAL_IFACE}
+iface ${PORTAL_IFACE} inet static
+    address ${PORTAL_IP}
+    netmask 255.255.255.0
+    gateway ${ROUTER_IP}
+    dns-nameservers 1.1.1.1 8.8.8.8
+EOF
+        sudo ifup "$PORTAL_IFACE" 2>/dev/null || true
+        return 0
+    fi
+
+    if [ -f /etc/dhcpcd.conf ]; then
+        echo -e "--> Persisting static IP through dhcpcd"
+        sudo sed -i '/^# BEGIN OPENPISOWIFI PORTAL$/,/^# END OPENPISOWIFI PORTAL$/d' /etc/dhcpcd.conf
+        sudo tee -a /etc/dhcpcd.conf >/dev/null <<EOF
+
+# BEGIN OPENPISOWIFI PORTAL
 interface ${PORTAL_IFACE}
 static ip_address=${PORTAL_IP}/24
 static routers=${ROUTER_IP}
 static domain_name_servers=1.1.1.1 8.8.8.8
+# END OPENPISOWIFI PORTAL
 EOF
-        sudo systemctl restart dhcpcd || true
+        sudo systemctl enable --now dhcpcd 2>/dev/null || sudo systemctl restart dhcpcd 2>/dev/null || true
+        return 0
     fi
-fi
+
+    echo -e "--> No persistent network manager detected; installing a boot-time systemd network unit"
+    sudo tee "$fallback_unit" >/dev/null <<EOF
+[Unit]
+Description=OpenPisoWiFi persistent portal network configuration
+Wants=network-pre.target
+After=network-pre.target
+Before=pisowifi-daemon.service pisowifi-portal.service
+
+[Service]
+Type=oneshot
+ExecStart=${ip_bin} link set dev ${PORTAL_IFACE} up
+ExecStart=${ip_bin} addr replace ${PORTAL_IP}/24 dev ${PORTAL_IFACE}
+ExecStart=${ip_bin} route replace default via ${ROUTER_IP} dev ${PORTAL_IFACE}
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    sudo systemctl daemon-reload
+    sudo systemctl enable --now openpisowifi-portal-network.service
+}
+
+persist_portal_network
+
 echo -e "${GREEN}✓ Static IP verified: ${PORTAL_IP}/24 (Gateway: ${ROUTER_IP}).${NC}"
 
 # ------------------------------------------------------------------------------

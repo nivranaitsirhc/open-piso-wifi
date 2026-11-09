@@ -937,10 +937,10 @@ export default function BuildGuidePage() {
                   </p>
                   <div className="relative">
                     <pre className="p-3 bg-neutral-900 text-amber-300 rounded-xl font-mono text-xs overflow-x-auto">
-                      <code>sudo bash scripts/setup-pi-gateway.sh --wan eth0 --lan eth1 --subnet 10.0.0.1/22</code>
+                      <code>sudo bash scripts/setup-sbc-gateway.sh --wan-iface eth0 --lan-iface eth1</code>
                     </pre>
                     <button
-                      onClick={() => copyToClipboard('sudo bash scripts/setup-pi-gateway.sh --wan eth0 --lan eth1 --subnet 10.0.0.1/22', 'b2-step2')}
+                      onClick={() => copyToClipboard('sudo bash scripts/setup-sbc-gateway.sh --wan-iface eth0 --lan-iface eth1', 'b2-step2')}
                       className="absolute right-2 top-2 p-1.5 bg-neutral-800 text-neutral-300 hover:text-white rounded-lg border border-neutral-700 btn-press"
                       title="Copy command"
                     >

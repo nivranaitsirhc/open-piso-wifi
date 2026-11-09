@@ -9,10 +9,10 @@
 # - dnsmasq: DHCP server (10.0.0.10 - 10.0.3.250) + captive DNS responder
 #
 # Usage:
-#   sudo ./scripts/setup-pi-gateway.sh               # Run standard installation
-#   sudo ./scripts/setup-pi-gateway.sh --dry-run     # Preview actions without changes
-#   sudo ./scripts/setup-pi-gateway.sh --rollback    # Remove gateway configuration
-#   sudo ./scripts/setup-pi-gateway.sh --status      # Check current gateway status
+#   sudo ./scripts/setup-sbc-gateway.sh               # Run standard installation
+#   sudo ./scripts/setup-sbc-gateway.sh --dry-run     # Preview actions without changes
+#   sudo ./scripts/setup-sbc-gateway.sh --rollback    # Remove gateway configuration
+#   sudo ./scripts/setup-sbc-gateway.sh --status      # Check current gateway status
 # ==============================================================================
 
 set -eo pipefail
@@ -28,13 +28,37 @@ NC='\033[0m'
 # callers do not provide WAN_IFACE/LAN_IFACE explicitly.
 WAN_IFACE="${WAN_IFACE:-}"
 LAN_IFACE="${LAN_IFACE:-}"
-LAN_IP="${LAN_IP:-10.0.0.1}"
-LAN_PREFIX="${LAN_PREFIX:-22}"
-LAN_NETMASK="${LAN_NETMASK:-255.255.252.0}"
+LAN_IP="${LAN_IP:-}"
+LAN_PREFIX="${LAN_PREFIX:-}"
+LAN_NETMASK="${LAN_NETMASK:-}"
 DHCP_RANGE="${DHCP_RANGE:-10.0.0.10,10.0.3.250,255.255.252.0,12h}"
 PORTAL_PORT="${PORTAL_PORT:-3000}"
 INSTALL_ROOT="${OPENPISOWIFI_INSTALL_DIR:-/opt/open-piso-wifi}"
 DAEMON_ENV_FILE="${INSTALL_ROOT}/daemon/.env"
+GATEWAY_STATE_FILE="/etc/openpiso-gateway.env"
+NETWORKD_DIR="/etc/systemd/network"
+NETWORKD_WAN_FILE="${NETWORKD_DIR}/10-openpiso-gateway-wan.network"
+NETWORKD_LAN_FILE="${NETWORKD_DIR}/20-openpiso-gateway-lan.network"
+IFUPDOWN_FILE="/etc/network/interfaces.d/openpiso-gateway"
+DHCPCD_MARKER_BEGIN="# BEGIN OPENPISOWIFI GATEWAY"
+DHCPCD_MARKER_END="# END OPENPISOWIFI GATEWAY"
+FALLBACK_NETWORK_UNIT="/etc/systemd/system/openpiso-gateway-network.service"
+NETWORK_BACKEND=""
+
+# Reuse the last explicit gateway assignment on reruns. Command-line and
+# environment values remain higher priority because they are assigned first.
+if [ -f "$GATEWAY_STATE_FILE" ]; then
+  state_value() { sed -n "s/^$1=//p" "$GATEWAY_STATE_FILE" | head -n1 | tr -d '\r'; }
+  [ -n "$WAN_IFACE" ] || WAN_IFACE="$(state_value WAN_IFACE)"
+  [ -n "$LAN_IFACE" ] || LAN_IFACE="$(state_value LAN_IFACE)"
+  [ -n "$LAN_IP" ] || LAN_IP="$(state_value LAN_IP)"
+  [ -n "$LAN_PREFIX" ] || LAN_PREFIX="$(state_value LAN_PREFIX)"
+  [ -n "$LAN_NETMASK" ] || LAN_NETMASK="$(state_value LAN_NETMASK)"
+fi
+
+LAN_IP="${LAN_IP:-10.0.0.1}"
+LAN_PREFIX="${LAN_PREFIX:-22}"
+LAN_NETMASK="${LAN_NETMASK:-255.255.252.0}"
 
 DRY_RUN=false
 ROLLBACK=false
@@ -177,6 +201,130 @@ persist_daemon_gateway_config() {
   set_env_value "ROUTER_MODE" "local_linux"
   set_env_value "ROUTER_WAN_INTERFACE" "$WAN_IFACE"
   set_env_value "ROUTER_LAN_INTERFACE" "$LAN_IFACE"
+  set_env_value "WAN_IFACE" "$WAN_IFACE"
+  set_env_value "LAN_IFACE" "$LAN_IFACE"
+  set_env_value "LAN_IP" "$LAN_IP"
+  set_env_value "LAN_PREFIX" "$LAN_PREFIX"
+}
+
+persist_gateway_state() {
+  cat > "$GATEWAY_STATE_FILE" <<EOF
+# OpenPisoWiFi SBC gateway network state. Managed by setup-sbc-gateway.sh.
+WAN_IFACE=$WAN_IFACE
+LAN_IFACE=$LAN_IFACE
+LAN_IP=$LAN_IP
+LAN_PREFIX=$LAN_PREFIX
+LAN_NETMASK=$LAN_NETMASK
+NETWORK_BACKEND=$NETWORK_BACKEND
+EOF
+  chmod 600 "$GATEWAY_STATE_FILE"
+}
+
+ensure_ifupdown_include() {
+  mkdir -p /etc/network/interfaces.d
+  if [ ! -f /etc/network/interfaces ]; then
+    touch /etc/network/interfaces
+  fi
+  if ! grep -Eq '^[[:space:]]*(source|source-directory)[[:space:]]+/etc/network/interfaces\.d/\*' /etc/network/interfaces; then
+    printf '\nsource /etc/network/interfaces.d/*\n' >> /etc/network/interfaces
+  fi
+}
+
+configure_gateway_network() {
+  local ip_bin
+  ip_bin="$(command -v ip)"
+
+  # Remove only configurations owned by this gateway profile before selecting
+  # the active backend. This prevents stale backend files from competing after
+  # a migration or a repeated setup run.
+  nmcli connection delete openpiso-gateway-lan 2>/dev/null || true
+  nmcli connection delete openpiso-gateway-wan 2>/dev/null || true
+  rm -f "$NETWORKD_WAN_FILE" "$NETWORKD_LAN_FILE" "$FALLBACK_NETWORK_UNIT"
+  sed -i "/^${DHCPCD_MARKER_BEGIN}$/,/^${DHCPCD_MARKER_END}$/d" /etc/dhcpcd.conf 2>/dev/null || true
+
+  if command -v nmcli >/dev/null 2>&1 && systemctl is-active --quiet NetworkManager; then
+    NETWORK_BACKEND="networkmanager"
+    nmcli connection delete openpiso-gateway-lan 2>/dev/null || true
+    nmcli connection delete openpiso-gateway-wan 2>/dev/null || true
+    nmcli connection add type ethernet con-name openpiso-gateway-lan ifname "$LAN_IFACE" \
+      ipv4.method manual ipv4.addresses "$LAN_IP/$LAN_PREFIX" ipv6.method disabled
+    nmcli connection add type ethernet con-name openpiso-gateway-wan ifname "$WAN_IFACE" \
+      ipv4.method auto ipv6.method auto
+    nmcli connection up openpiso-gateway-lan || true
+    nmcli connection up openpiso-gateway-wan || true
+  elif systemctl is-active --quiet systemd-networkd || systemctl is-enabled --quiet systemd-networkd; then
+    NETWORK_BACKEND="systemd-networkd"
+    mkdir -p "$NETWORKD_DIR"
+    cat > "$NETWORKD_WAN_FILE" <<EOF
+[Match]
+Name=${WAN_IFACE}
+
+[Network]
+DHCP=yes
+IPv6AcceptRA=no
+EOF
+    cat > "$NETWORKD_LAN_FILE" <<EOF
+[Match]
+Name=${LAN_IFACE}
+
+[Network]
+Address=${LAN_IP}/${LAN_PREFIX}
+IPv6AcceptRA=no
+LinkLocalAddressing=no
+EOF
+    systemctl enable --now systemd-networkd
+    networkctl reload 2>/dev/null || true
+    networkctl reconfigure "$WAN_IFACE" 2>/dev/null || true
+    networkctl reconfigure "$LAN_IFACE" 2>/dev/null || true
+  elif command -v ifup >/dev/null 2>&1 && [ -f /etc/network/interfaces ]; then
+    NETWORK_BACKEND="ifupdown"
+    ensure_ifupdown_include
+    cat > "$IFUPDOWN_FILE" <<EOF
+# Managed by OpenPisoWiFi setup-sbc-gateway.sh.
+auto ${WAN_IFACE}
+iface ${WAN_IFACE} inet dhcp
+
+auto ${LAN_IFACE}
+iface ${LAN_IFACE} inet static
+    address ${LAN_IP}
+    netmask ${LAN_NETMASK}
+EOF
+    ifup "$WAN_IFACE" 2>/dev/null || true
+    ifup "$LAN_IFACE" 2>/dev/null || true
+  elif command -v dhcpcd >/dev/null 2>&1 && [ -f /etc/dhcpcd.conf ]; then
+    NETWORK_BACKEND="dhcpcd"
+    sed -i "/^${DHCPCD_MARKER_BEGIN}$/,/^${DHCPCD_MARKER_END}$/d" /etc/dhcpcd.conf
+    cat >> /etc/dhcpcd.conf <<EOF
+
+${DHCPCD_MARKER_BEGIN}
+interface ${LAN_IFACE}
+static ip_address=${LAN_IP}/${LAN_PREFIX}
+${DHCPCD_MARKER_END}
+EOF
+    systemctl enable --now dhcpcd 2>/dev/null || systemctl restart dhcpcd 2>/dev/null || true
+  else
+    NETWORK_BACKEND="systemd-fallback"
+    cat > "$FALLBACK_NETWORK_UNIT" <<EOF
+[Unit]
+Description=OpenPisoWiFi persistent SBC LAN configuration
+Wants=network-pre.target
+After=network-pre.target
+Before=dnsmasq.service nftables.service
+
+[Service]
+Type=oneshot
+ExecStart=${ip_bin} link set dev ${LAN_IFACE} up
+ExecStart=${ip_bin} addr replace ${LAN_IP}/${LAN_PREFIX} dev ${LAN_IFACE}
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    systemctl daemon-reload
+    systemctl enable --now openpiso-gateway-network.service
+  fi
+
+  persist_gateway_state
 }
 
 # ------------------------------------------------------------------------------
@@ -201,7 +349,7 @@ fi
 # ROOT PERMISSION CHECK
 # ------------------------------------------------------------------------------
 if [ "$EUID" -ne 0 ] && [ "$DRY_RUN" = false ]; then
-  echo -e "${RED}❌ Please run as root (sudo ./scripts/setup-pi-gateway.sh)${NC}"
+  echo -e "${RED}❌ Please run as root (sudo ./scripts/setup-sbc-gateway.sh)${NC}"
   exit 1
 fi
 
@@ -216,6 +364,14 @@ if [ "$ROLLBACK" = true ]; then
   # Remove dnsmasq config
   rm -f /etc/dnsmasq.d/openpiso-gateway.conf
   systemctl restart dnsmasq 2>/dev/null || true
+
+  # Remove persisted network backend configuration created by this script.
+  nmcli connection delete openpiso-gateway-lan 2>/dev/null || true
+  nmcli connection delete openpiso-gateway-wan 2>/dev/null || true
+  sed -i "/^${DHCPCD_MARKER_BEGIN}$/,/^${DHCPCD_MARKER_END}$/d" /etc/dhcpcd.conf 2>/dev/null || true
+  rm -f "$NETWORKD_WAN_FILE" "$NETWORKD_LAN_FILE" "$IFUPDOWN_FILE" "$FALLBACK_NETWORK_UNIT" "$GATEWAY_STATE_FILE"
+  systemctl disable --now openpiso-gateway-network.service 2>/dev/null || true
+  systemctl daemon-reload 2>/dev/null || true
 
   # Remove nftables table
   if command -v nft >/dev/null 2>&1; then
@@ -297,16 +453,7 @@ echo -e "${GREEN}✅ IP Forwarding enabled.${NC}"
 echo -e "${CYAN}🌐 Configuring LAN Interface (${LAN_IFACE} -> ${LAN_IP}/${LAN_PREFIX})...${NC}"
 
 if [ "$DRY_RUN" = false ]; then
-  # If NetworkManager is running, configure via nmcli
-  if systemctl is-active --quiet NetworkManager; then
-    nmcli connection delete "openpiso-lan" 2>/dev/null || true
-    nmcli connection add type ethernet con-name "openpiso-lan" ifname "$LAN_IFACE" ip4 "$LAN_IP/$LAN_PREFIX"
-    nmcli connection up "openpiso-lan" || true
-  else
-    # Fallback to ip link / ip addr
-    ip addr add "$LAN_IP/$LAN_PREFIX" dev "$LAN_IFACE" 2>/dev/null || true
-    ip link set "$LAN_IFACE" up
-  fi
+  configure_gateway_network
 fi
 echo -e "${GREEN}✅ LAN interface configured.${NC}"
 
@@ -350,6 +497,7 @@ address=/www.msftconnecttest.com/${LAN_IP}
 address=/ipv6.msftconnecttest.com/${LAN_IP}
 
 # Upstream Public DNS Fallback
+no-resolv
 server=1.1.1.1
 server=8.8.8.8
 EOF
