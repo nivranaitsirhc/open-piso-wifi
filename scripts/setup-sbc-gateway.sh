@@ -269,12 +269,12 @@ configure_gateway_network() {
 network:
   version: 2
   ethernets:
-    openpiso-wan:
+    00-openpiso-wan:
       match:
         name: "${WAN_IFACE}"
       dhcp4: true
       dhcp6: false
-    openpiso-lan:
+    00-openpiso-lan:
       match:
         name: "${LAN_IFACE}"
       dhcp4: false
@@ -285,17 +285,26 @@ EOF
     chmod 600 "$NETPLAN_FILE"
     netplan generate
     netplan apply
-    local attempt lan_ready wan_ready
+    local attempt lan_ready wan_ready wan_status lan_status wan_network_file lan_network_file
     for attempt in {1..60}; do
       lan_ready=false
       wan_ready=false
-      ip -o -4 addr show dev "$LAN_IFACE" 2>/dev/null | awk '{print $4}' | grep -Fxq "${LAN_IP}/${LAN_PREFIX}" && lan_ready=true
-      ip -o -4 addr show dev "$WAN_IFACE" 2>/dev/null | awk '{print $4}' | grep -q . && wan_ready=true
+      wan_status="$(networkctl status --no-pager "$WAN_IFACE" 2>/dev/null || true)"
+      lan_status="$(networkctl status --no-pager "$LAN_IFACE" 2>/dev/null || true)"
+      wan_network_file="$(printf '%s\n' "$wan_status" | sed -n 's/^[[:space:]]*Network File:[[:space:]]*//p' | head -n1)"
+      lan_network_file="$(printf '%s\n' "$lan_status" | sed -n 's/^[[:space:]]*Network File:[[:space:]]*//p' | head -n1)"
+      ip -o -4 addr show dev "$LAN_IFACE" 2>/dev/null | awk '{print $4}' | grep -Fxq "${LAN_IP}/${LAN_PREFIX}" \
+        && printf '%s\n' "$lan_status" | grep -Eq 'DHCP4 Client:[[:space:]]*no' \
+        && [[ "$lan_network_file" == *10-netplan-00-openpiso-lan.network ]] && lan_ready=true
+      ip -o -4 addr show dev "$WAN_IFACE" 2>/dev/null | awk '{print $4}' | grep -q . \
+        && printf '%s\n' "$wan_status" | grep -Eq 'DHCP4 Client:[[:space:]]*yes' \
+        && [[ "$wan_network_file" == *10-netplan-00-openpiso-wan.network ]] && wan_ready=true
       [ "$lan_ready" = true ] && [ "$wan_ready" = true ] && break
       sleep 2
     done
     if [ "$lan_ready" != true ] || [ "$wan_ready" != true ]; then
-      echo -e "${RED}❌ Netplan did not configure both interfaces (WAN=${WAN_IFACE}, LAN=${LAN_IFACE}).${NC}" >&2
+      echo -e "${RED}❌ Netplan verification failed. WAN file: ${wan_network_file:-unknown}; LAN file: ${lan_network_file:-unknown}.${NC}" >&2
+      echo -e "${YELLOW}Check for wildcard Netplan definitions or another .network profile matching these interfaces.${NC}" >&2
       return 1
     fi
   elif systemctl is-active --quiet systemd-networkd || systemctl is-enabled --quiet systemd-networkd; then
