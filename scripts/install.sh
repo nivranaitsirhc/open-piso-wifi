@@ -474,14 +474,10 @@ fi
 echo -e "${GREEN}✓ Node.js $(node -v) & npm $(npm -v) verified at ${NODE_BIN}.${NC}"
 
 # ------------------------------------------------------------------------------
-# STEP 2: CONFIGURE STATIC IP ($PORTAL_IP)
+# STEP 2: FETCH PRE-BUILT RELEASE BUNDLE (Zero Client-Side Build)
 # ------------------------------------------------------------------------------
 echo ""
-echo -e "${PURPLE}[2/6] Configuring Static LAN IP (${PORTAL_IP})...${NC}"
-if [ -z "$PORTAL_IFACE" ]; then
-    echo -e "${RED}❌ Could not determine the portal network interface; refusing to create a non-persistent IP configuration.${NC}"
-    exit 1
-fi
+echo -e "${PURPLE}[2/6] Fetching pre-built software bundle...${NC}"
 
 persist_portal_network() {
     local networkd_dir="/etc/systemd/network"
@@ -585,14 +581,6 @@ EOF
     sudo systemctl daemon-reload
     sudo systemctl enable --now openpisowifi-portal-network.service
 }
-
-echo -e "${GREEN}✓ Network persistence will be applied after the release bundle is downloaded.${NC}"
-
-# ------------------------------------------------------------------------------
-# STEP 3: FETCH PRE-BUILT RELEASE BUNDLE (Zero Client-Side Build)
-# ------------------------------------------------------------------------------
-echo ""
-echo -e "${PURPLE}[3/6] Fetching pre-built software bundle...${NC}"
 
 # Check if standalone portal and daemon dist already exist (e.g. offline build or cloned release)
 ALREADY_EXTRACTED=false
@@ -759,9 +747,17 @@ if [ "$ALREADY_EXTRACTED" = false ]; then
 fi
 
 # ------------------------------------------------------------------------------
+# STEP 3: CONFIGURE STATIC IP ($PORTAL_IP)
+# ------------------------------------------------------------------------------
 # Apply the persistent portal network only after the release download succeeds.
 # Reconfiguring the active LAN/DNS path before this point can disconnect GitHub
 # access on systems without NetworkManager.
+echo ""
+echo -e "${PURPLE}[3/6] Configuring Static LAN IP (${PORTAL_IP})...${NC}"
+if [ -z "$PORTAL_IFACE" ]; then
+    echo -e "${RED}❌ Could not determine the portal network interface; refusing to create a non-persistent IP configuration.${NC}"
+    exit 1
+fi
 persist_portal_network
 echo -e "${GREEN}✓ Static IP persisted: ${PORTAL_IP}/24 (Gateway: ${ROUTER_IP}).${NC}"
 
