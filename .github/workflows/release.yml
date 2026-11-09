@@ -22,6 +22,10 @@ on:
         required: false
         default: 'v1.0.0'
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: write
 
