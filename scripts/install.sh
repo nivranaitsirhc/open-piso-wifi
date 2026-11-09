@@ -586,9 +586,7 @@ EOF
     sudo systemctl enable --now openpisowifi-portal-network.service
 }
 
-persist_portal_network
-
-echo -e "${GREEN}✓ Static IP verified: ${PORTAL_IP}/24 (Gateway: ${ROUTER_IP}).${NC}"
+echo -e "${GREEN}✓ Network persistence will be applied after the release bundle is downloaded.${NC}"
 
 # ------------------------------------------------------------------------------
 # STEP 3: FETCH PRE-BUILT RELEASE BUNDLE (Zero Client-Side Build)
@@ -759,6 +757,13 @@ if [ "$ALREADY_EXTRACTED" = false ]; then
     rm -f "$TEMP_TARBALL"
     echo -e "${GREEN}✓ Pre-built software bundle extracted successfully.${NC}"
 fi
+
+# ------------------------------------------------------------------------------
+# Apply the persistent portal network only after the release download succeeds.
+# Reconfiguring the active LAN/DNS path before this point can disconnect GitHub
+# access on systems without NetworkManager.
+persist_portal_network
+echo -e "${GREEN}✓ Static IP persisted: ${PORTAL_IP}/24 (Gateway: ${ROUTER_IP}).${NC}"
 
 # ------------------------------------------------------------------------------
 # STEP 4: ENVIRONMENT & DATABASE INITIALIZATION
