@@ -155,12 +155,6 @@ jobs:
 
           Architecture-specific pre-built Linux bundles for OpenPisoWiFi.
 
-          Included assets:
-          - `opw-linux-armv7.tar.gz`
-          - `opw-linux-arm64.tar.gz`
-          - `opw-linux-amd64.tar.gz`
-          - `version.json`
-
           The installer and updater select the matching bundle from the SBC architecture automatically.
           EOF
 
