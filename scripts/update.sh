@@ -180,10 +180,8 @@ ensure_local_linux_network() {
     if [ -z "$backend" ]; then
         if [ -f /etc/systemd/system/openpiso-gateway-network.service ]; then
             backend="systemd-fallback"
-        elif [ -f /etc/systemd/network/20-openpiso-gateway-lan.network ]; then
+        elif [ -f /etc/systemd/network/06-openpiso-lan.network ] || [ -f /etc/systemd/network/20-openpiso-gateway-lan.network ]; then
             backend="systemd-networkd"
-        elif [ -f /etc/netplan/99-openpiso-gateway.yaml ]; then
-            backend="netplan"
         elif [ -f /etc/network/interfaces.d/openpiso-gateway ]; then
             backend="ifupdown"
         elif [ -f /etc/dhcpcd.conf ] && grep -q '# BEGIN OPENPISOWIFI GATEWAY' /etc/dhcpcd.conf; then
@@ -201,10 +199,6 @@ ensure_local_linux_network() {
             $SUDO_CMD networkctl reload >/dev/null 2>&1 || true
             [ -n "$wan_iface" ] && $SUDO_CMD networkctl reconfigure "$wan_iface" >/dev/null 2>&1 || true
             [ -n "$lan_iface" ] && $SUDO_CMD networkctl reconfigure "$lan_iface" >/dev/null 2>&1 || true
-            ;;
-        netplan)
-            $SUDO_CMD netplan generate >/dev/null 2>&1 || true
-            $SUDO_CMD netplan apply >/dev/null 2>&1 || true
             ;;
         ifupdown)
             [ -n "$wan_iface" ] && $SUDO_CMD ifup "$wan_iface" >/dev/null 2>&1 || true

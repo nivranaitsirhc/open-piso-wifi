@@ -37,9 +37,11 @@ INSTALL_ROOT="${OPENPISOWIFI_INSTALL_DIR:-/opt/open-piso-wifi}"
 DAEMON_ENV_FILE="${INSTALL_ROOT}/daemon/.env"
 GATEWAY_STATE_FILE="/etc/openpiso-gateway.env"
 NETWORKD_DIR="/etc/systemd/network"
-NETWORKD_WAN_FILE="${NETWORKD_DIR}/10-openpiso-gateway-wan.network"
-NETWORKD_LAN_FILE="${NETWORKD_DIR}/20-openpiso-gateway-lan.network"
-NETPLAN_FILE="/etc/netplan/99-openpiso-gateway.yaml"
+NETWORKD_WAN_FILE="${NETWORKD_DIR}/05-openpiso-wan.network"
+NETWORKD_LAN_FILE="${NETWORKD_DIR}/06-openpiso-lan.network"
+LEGACY_NETWORKD_WAN_FILE="${NETWORKD_DIR}/10-openpiso-gateway-wan.network"
+LEGACY_NETWORKD_LAN_FILE="${NETWORKD_DIR}/20-openpiso-gateway-lan.network"
+LEGACY_NETPLAN_FILE="/etc/netplan/99-openpiso-gateway.yaml"
 IFUPDOWN_FILE="/etc/network/interfaces.d/openpiso-gateway"
 DHCPCD_MARKER_BEGIN="# BEGIN OPENPISOWIFI GATEWAY"
 DHCPCD_MARKER_END="# END OPENPISOWIFI GATEWAY"
@@ -233,12 +235,6 @@ ensure_ifupdown_include() {
   fi
 }
 
-netplan_manages_interfaces() {
-  command -v netplan >/dev/null 2>&1 || return 1
-  [ -d /etc/netplan ] || return 1
-  find /etc/netplan -maxdepth 1 -type f \( -name '*.yaml' -o -name '*.yml' \) -print -quit 2>/dev/null | grep -q .
-}
-
 configure_gateway_network() {
   local ip_bin
   ip_bin="$(command -v ip)"
@@ -248,8 +244,9 @@ configure_gateway_network() {
   # a migration or a repeated setup run.
   nmcli connection delete openpiso-gateway-lan 2>/dev/null || true
   nmcli connection delete openpiso-gateway-wan 2>/dev/null || true
-  rm -f "$NETWORKD_WAN_FILE" "$NETWORKD_LAN_FILE" "$FALLBACK_NETWORK_UNIT"
-  rm -f "$NETPLAN_FILE"
+  rm -f "$NETWORKD_WAN_FILE" "$NETWORKD_LAN_FILE" \
+    "$LEGACY_NETWORKD_WAN_FILE" "$LEGACY_NETWORKD_LAN_FILE" \
+    "$LEGACY_NETPLAN_FILE" "$FALLBACK_NETWORK_UNIT"
   rm -f "$DNSMASQ_DROPIN" "$NFTABLES_DROPIN"
   sed -i "/^${DHCPCD_MARKER_BEGIN}$/,/^${DHCPCD_MARKER_END}$/d" /etc/dhcpcd.conf 2>/dev/null || true
 
@@ -263,51 +260,7 @@ configure_gateway_network() {
       ipv4.method auto ipv6.method auto
     nmcli connection up openpiso-gateway-lan || true
     nmcli connection up openpiso-gateway-wan || true
-  elif netplan_manages_interfaces; then
-    NETWORK_BACKEND="netplan"
-    cat > "$NETPLAN_FILE" <<EOF
-network:
-  version: 2
-  ethernets:
-    00-openpiso-wan:
-      match:
-        name: "${WAN_IFACE}"
-      dhcp4: true
-      dhcp6: false
-    00-openpiso-lan:
-      match:
-        name: "${LAN_IFACE}"
-      dhcp4: false
-      dhcp6: false
-      addresses:
-        - ${LAN_IP}/${LAN_PREFIX}
-EOF
-    chmod 600 "$NETPLAN_FILE"
-    netplan generate
-    netplan apply
-    local attempt lan_ready wan_ready wan_status lan_status wan_network_file lan_network_file
-    for attempt in {1..60}; do
-      lan_ready=false
-      wan_ready=false
-      wan_status="$(networkctl status --no-pager "$WAN_IFACE" 2>/dev/null || true)"
-      lan_status="$(networkctl status --no-pager "$LAN_IFACE" 2>/dev/null || true)"
-      wan_network_file="$(printf '%s\n' "$wan_status" | sed -n 's/^[[:space:]]*Network File:[[:space:]]*//p' | head -n1)"
-      lan_network_file="$(printf '%s\n' "$lan_status" | sed -n 's/^[[:space:]]*Network File:[[:space:]]*//p' | head -n1)"
-      ip -o -4 addr show dev "$LAN_IFACE" 2>/dev/null | awk '{print $4}' | grep -Fxq "${LAN_IP}/${LAN_PREFIX}" \
-        && printf '%s\n' "$lan_status" | grep -Eq 'DHCP4 Client:[[:space:]]*no' \
-        && [[ "$lan_network_file" == *10-netplan-00-openpiso-lan.network ]] && lan_ready=true
-      ip -o -4 addr show dev "$WAN_IFACE" 2>/dev/null | awk '{print $4}' | grep -q . \
-        && printf '%s\n' "$wan_status" | grep -Eq 'DHCP4 Client:[[:space:]]*yes' \
-        && [[ "$wan_network_file" == *10-netplan-00-openpiso-wan.network ]] && wan_ready=true
-      [ "$lan_ready" = true ] && [ "$wan_ready" = true ] && break
-      sleep 2
-    done
-    if [ "$lan_ready" != true ] || [ "$wan_ready" != true ]; then
-      echo -e "${RED}❌ Netplan verification failed. WAN file: ${wan_network_file:-unknown}; LAN file: ${lan_network_file:-unknown}.${NC}" >&2
-      echo -e "${YELLOW}Check for wildcard Netplan definitions or another .network profile matching these interfaces.${NC}" >&2
-      return 1
-    fi
-  elif systemctl is-active --quiet systemd-networkd || systemctl is-enabled --quiet systemd-networkd; then
+  elif command -v networkctl >/dev/null 2>&1 && systemctl cat systemd-networkd.service >/dev/null 2>&1; then
     NETWORK_BACKEND="systemd-networkd"
     mkdir -p "$NETWORKD_DIR"
     cat > "$NETWORKD_WAN_FILE" <<EOF
@@ -315,7 +268,7 @@ EOF
 Name=${WAN_IFACE}
 
 [Network]
-DHCP=yes
+DHCP=ipv4
 IPv6AcceptRA=no
 EOF
     cat > "$NETWORKD_LAN_FILE" <<EOF
@@ -331,6 +284,28 @@ EOF
     networkctl reload 2>/dev/null || true
     networkctl reconfigure "$WAN_IFACE" 2>/dev/null || true
     networkctl reconfigure "$LAN_IFACE" 2>/dev/null || true
+    local attempt lan_ready wan_ready wan_status lan_status wan_network_file lan_network_file
+    for attempt in {1..60}; do
+      lan_ready=false
+      wan_ready=false
+      wan_status="$(networkctl status --no-pager "$WAN_IFACE" 2>/dev/null || true)"
+      lan_status="$(networkctl status --no-pager "$LAN_IFACE" 2>/dev/null || true)"
+      wan_network_file="$(printf '%s\n' "$wan_status" | sed -n 's/^[[:space:]]*Network File:[[:space:]]*//p' | head -n1)"
+      lan_network_file="$(printf '%s\n' "$lan_status" | sed -n 's/^[[:space:]]*Network File:[[:space:]]*//p' | head -n1)"
+      ip -o -4 addr show dev "$LAN_IFACE" 2>/dev/null | awk '{print $4}' | grep -Fxq "${LAN_IP}/${LAN_PREFIX}" \
+        && printf '%s\n' "$lan_status" | grep -Eq 'DHCP4 Client:[[:space:]]*no' \
+        && [[ "$lan_network_file" == *"$(basename "$NETWORKD_LAN_FILE")" ]] && lan_ready=true
+      ip -o -4 addr show dev "$WAN_IFACE" 2>/dev/null | awk '{print $4}' | grep -q . \
+        && printf '%s\n' "$wan_status" | grep -Eq 'DHCP4 Client:[[:space:]]*yes' \
+        && [[ "$wan_network_file" == *"$(basename "$NETWORKD_WAN_FILE")" ]] && wan_ready=true
+      [ "$lan_ready" = true ] && [ "$wan_ready" = true ] && break
+      sleep 2
+    done
+    if [ "$lan_ready" != true ] || [ "$wan_ready" != true ]; then
+      echo -e "${RED}❌ systemd-networkd verification failed. WAN file: ${wan_network_file:-unknown}; LAN file: ${lan_network_file:-unknown}.${NC}" >&2
+      echo -e "${YELLOW}Check for another .network profile matching ${WAN_IFACE} or ${LAN_IFACE}.${NC}" >&2
+      return 1
+    fi
   elif command -v ifup >/dev/null 2>&1 && [ -f /etc/network/interfaces ]; then
     NETWORK_BACKEND="ifupdown"
     ensure_ifupdown_include
@@ -434,12 +409,13 @@ if [ "$ROLLBACK" = true ]; then
   nmcli connection delete openpiso-gateway-lan 2>/dev/null || true
   nmcli connection delete openpiso-gateway-wan 2>/dev/null || true
   sed -i "/^${DHCPCD_MARKER_BEGIN}$/,/^${DHCPCD_MARKER_END}$/d" /etc/dhcpcd.conf 2>/dev/null || true
-  rm -f "$NETWORKD_WAN_FILE" "$NETWORKD_LAN_FILE" "$NETPLAN_FILE" "$IFUPDOWN_FILE" "$FALLBACK_NETWORK_UNIT" "$GATEWAY_STATE_FILE"
+  rm -f "$NETWORKD_WAN_FILE" "$NETWORKD_LAN_FILE" \
+    "$LEGACY_NETWORKD_WAN_FILE" "$LEGACY_NETWORKD_LAN_FILE" "$IFUPDOWN_FILE" \
+    "$LEGACY_NETPLAN_FILE" "$FALLBACK_NETWORK_UNIT" "$GATEWAY_STATE_FILE"
   rm -f "$DNSMASQ_DROPIN" "$NFTABLES_DROPIN"
   rmdir "$(dirname "$DNSMASQ_DROPIN")" "$(dirname "$NFTABLES_DROPIN")" 2>/dev/null || true
   systemctl disable --now openpiso-gateway-network.service 2>/dev/null || true
   systemctl daemon-reload 2>/dev/null || true
-  command -v netplan >/dev/null 2>&1 && netplan apply 2>/dev/null || true
 
   # Remove nftables table
   if command -v nft >/dev/null 2>&1; then
