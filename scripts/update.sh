@@ -180,7 +180,7 @@ ensure_local_linux_network() {
     if [ -z "$backend" ]; then
         if [ -f /etc/systemd/system/openpiso-gateway-network.service ]; then
             backend="systemd-fallback"
-        elif [ -f /etc/systemd/network/06-openpiso-lan.network ] || [ -f /etc/systemd/network/20-openpiso-gateway-lan.network ]; then
+        elif [ -f /etc/systemd/network/20-openpiso-gateway-lan.network ]; then
             backend="systemd-networkd"
         elif [ -f /etc/network/interfaces.d/openpiso-gateway ]; then
             backend="ifupdown"
